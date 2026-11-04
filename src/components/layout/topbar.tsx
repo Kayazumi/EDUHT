@@ -21,15 +21,25 @@ export function Topbar({ role, userName = "Người dùng" }: TopbarProps) {
         <Link href="/" className="font-bold text-lg text-blue-600">
           PBL Platform
         </Link>
-        <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+        <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-100">
           {roleLabel}
         </span>
       </div>
       <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-700 font-medium">{userName}</span>
-        <button className="text-sm text-red-600 hover:text-red-700 font-medium">
+        <span className="text-sm text-gray-700 font-medium hidden sm:inline">{userName}</span>
+        <Link
+          href="/login"
+          className="text-xs text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1"
+          title="Chuyển đổi nhanh vai trò"
+        >
+          <span>🔄</span> <span>Đổi vai trò</span>
+        </Link>
+        <Link
+          href="/login"
+          className="text-xs text-red-600 hover:text-red-700 font-medium"
+        >
           Đăng xuất
-        </button>
+        </Link>
       </div>
     </header>
   );

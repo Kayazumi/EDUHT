@@ -2,6 +2,7 @@
 'use server';
 
 import { createClient } from "@/server/supabase/server";
+import { cookies } from "next/headers";
 import { signInSchema, changePasswordSchema } from "@/shared/validation/auth";
 import type { ActionResult } from "@/shared/utils/errors";
 import { redirect } from "next/navigation";
@@ -46,6 +47,12 @@ export async function signOut(): Promise<ActionResult> {
     await supabase.auth.signOut();
   } catch {
     // Không cản trở redirect
+  }
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete("pbl_demo_role");
+  } catch {
+    // Không làm gián đoạn redirect
   }
   redirect(routes.auth.login);
 }

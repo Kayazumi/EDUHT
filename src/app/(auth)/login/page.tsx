@@ -35,12 +35,17 @@ export default function LoginPage() {
       if (nextUrl) {
         router.push(nextUrl);
       } else {
-        router.push(`/${res.data?.role || "student"}/dashboard`);
+        router.push(`/${res.data?.role || "student"}`);
       }
     } catch {
       setError("Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại.");
       setLoading(false);
     }
+  };
+
+  const handleQuickDemo = (role: "admin" | "teacher" | "student") => {
+    document.cookie = `pbl_demo_role=${role}; path=/; max-age=86400`;
+    router.push(`/${role}`);
   };
 
   return (
@@ -49,7 +54,7 @@ export default function LoginPage() {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Đăng nhập</h1>
           <p className="text-sm text-slate-500">
-            Hệ thống quản lý tiến trình và đánh giá đồng đẳng PBL
+            Hệ thống quản lý tiến trình và đánh giá đồng đẳng PBL môn Tin học
           </p>
         </div>
 
@@ -69,7 +74,7 @@ export default function LoginPage() {
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="hs.mau01 hoặc gv.nguyenvana"
+              placeholder="hs.an01 hoặc gv.lan hoặc admin"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -96,6 +101,53 @@ export default function LoginPage() {
             {loading ? "Đang xử lý..." : "Đăng nhập"}
           </button>
         </form>
+
+        {/* Khối xem thử nhanh theo vai trò */}
+        <div className="mt-6 pt-6 border-t border-slate-200 space-y-3">
+          <div className="text-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              ⚡ Xem trước giao diện theo vai trò
+            </span>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Chọn vai trò để vào thẳng trải nghiệm ngay:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuickDemo("admin")}
+              className="w-full py-2 px-3 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg flex items-center justify-between transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span>🛡️</span> <strong>Quản trị viên (Admin)</strong>
+              </span>
+              <span className="text-slate-400 font-mono text-[11px]">/admin →</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickDemo("teacher")}
+              className="w-full py-2 px-3 text-xs font-semibold text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center justify-between transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span>👨‍🏫</span> <strong>Giáo viên (Teacher)</strong>
+              </span>
+              <span className="text-blue-500 font-mono text-[11px]">/teacher →</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickDemo("student")}
+              className="w-full py-2 px-3 text-xs font-semibold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center justify-between transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span>🎓</span> <strong>Học sinh (Student)</strong>
+              </span>
+              <span className="text-emerald-500 font-mono text-[11px]">/student →</span>
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   );

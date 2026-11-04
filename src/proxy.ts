@@ -17,8 +17,10 @@ export async function proxy(request: NextRequest) {
 
   // 1. Cập nhật phiên từ Supabase cookie
   const { response, user } = await updateSession(request);
+  const demoRole = request.cookies.get("pbl_demo_role")?.value as Role | undefined;
+  const isDemoValid = demoRole && ["admin", "teacher", "student"].includes(demoRole);
 
-  if (!user) {
+  if (!user && !isDemoValid) {
     if (!isPublicPath) {
       const loginUrl = new URL("/login", request.url);
       if (pathname !== "/") {
@@ -29,9 +31,9 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // 2. Người dùng đã đăng nhập
-  const role = (user.app_metadata?.role as Role) || "student";
-  const mustChangePassword = !!user.app_metadata?.must_change_password;
+  // 2. Người dùng đã đăng nhập hoặc dùng demo preview role
+  const role = user ? ((user.app_metadata?.role as Role) || "student") : (demoRole as Role);
+  const mustChangePassword = user ? !!user.app_metadata?.must_change_password : false;
 
   // 2.1 Bắt buộc đổi mật khẩu nếu must_change_password = true
   if (mustChangePassword && pathname !== "/change-password" && !isPublicPath) {
@@ -42,9 +44,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(`/${role}/dashboard`, request.url));
   }
 
-  // 2.2 Đã đăng nhập truy cập /login hoặc trang chủ /
+  // 2.2 Đã có phiên truy cập /login hoặc trang chủ /
   if (pathname === "/login" || pathname === "/") {
-    return NextResponse.redirect(new URL(`/${role}/dashboard`, request.url));
+    return NextResponse.redirect(new URL(`/${role}`, request.url));
   }
 
   // 2.3 Phân quyền tiền tố URL (Scenario 12: gõ tay /teacher khi là student -> /forbidden)
