@@ -171,11 +171,10 @@ export default function StudentProjectReviewPage({
 
                   <Link
                     href={`/student/projects/${resolvedId || "p01"}/review/${peer.rateeId}`}
-                    className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-2xs transition-colors ${
-                      isDone
+                    className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-2xs transition-colors ${isDone
                         ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
                         : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
+                      }`}
                   >
                     {isDone ? "Xem lại phiếu đã nộp" : isDraft ? "Tiếp tục đánh giá →" : "Bắt đầu chấm →"}
                   </Link>
