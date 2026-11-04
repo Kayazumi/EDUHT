@@ -1,0 +1,12 @@
+<!-- [FE] Hình minh họa trang đăng nhập · tài liệu mục 4.10 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300" fill="none">
+  <rect x="50" y="40" width="300" height="220" rx="16" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="80" y="80" width="100" height="140" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+  <rect x="220" y="80" width="100" height="140" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+  <rect x="95" y="100" width="70" height="12" rx="4" fill="#3b82f6"/>
+  <rect x="95" y="125" width="50" height="8" rx="2" fill="#94a3b8"/>
+  <rect x="235" y="100" width="70" height="12" rx="4" fill="#10b981"/>
+  <rect x="235" y="125" width="60" height="8" rx="2" fill="#94a3b8"/>
+  <circle cx="200" cy="180" r="28" fill="#2563eb" opacity="0.1"/>
+  <text x="200" y="186" text-anchor="middle" fill="#2563eb" font-family="sans-serif" font-size="16" font-weight="bold">PBL</text>
+</svg>

@@ -1,0 +1,11 @@
+-- [DB] Nhóm, thẻ Kanban, nhật ký bốn tham số và trao đổi nhóm · tài liệu mục 4.4 và 5.4 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Table: groups (nhóm dự án, trạng thái khóa nhóm locked_at)
+-- 2. Table: group_members (thành viên nhóm, đảm bảo mỗi học sinh 1 nhóm trong 1 dự án)
+-- 3. Table: tasks (thẻ Kanban: todo, doing, done, người phụ trách, hạn chót, hoàn thành)
+-- 4. Table: task_events (nhật ký 4 tham số chỉ ghi thêm: task_id, assignee_id, due_at, occurred_at)
+-- 5. Table: group_messages (nhật ký trao đổi giữa giáo viên và nhóm)
+-- 6. Ràng buộc bất biến INV-01, INV-02
+-- 7. Bật Supabase Realtime cho tasks và group_messages:
+--    alter publication supabase_realtime add table tasks;
+--    alter publication supabase_realtime add table group_messages;

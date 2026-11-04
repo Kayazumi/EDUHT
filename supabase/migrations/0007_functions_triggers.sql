@@ -1,0 +1,14 @@
+-- [DB] Hàm hỗ trợ phân quyền và trigger nghiệp vụ bảo toàn dữ liệu · tài liệu mục 4.4 và 7.4 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Function: auth_role() (lấy vai trò của auth.uid() từ profiles)
+-- 2. Function: is_admin() (kiểm tra vai trò quản trị viên)
+-- 3. Function: is_teacher_of_class(class_id) (kiểm tra giáo viên phụ trách lớp)
+-- 4. Function: is_teacher_of_project(project_id) (kiểm tra giáo viên phụ trách dự án)
+-- 5. Function: is_student_in_class(class_id) (kiểm tra học sinh ghi danh trong lớp)
+-- 6. Function: is_member_of_group(group_id) (kiểm tra thành viên nhóm)
+-- 7. Function: project_is_active(project_id) (kiểm tra dự án đang chạy)
+-- 8. Function: results_published(project_id, student_id) (kiểm tra điểm đã công bố)
+-- 9. Trigger: set_updated_at (tự động cập nhật cột updated_at)
+-- 10. Trigger: guard_profile_update (chặn người dùng tự nâng quyền hoặc sửa vai trò)
+-- 11. Trigger: log_task_change (tự động ghi dòng nhật ký task_events 4 tham số khi có thao tác lên thẻ)
+-- 12. Trigger: forbid_mutation (chặn UPDATE, DELETE trên các bảng chỉ ghi thêm)

@@ -1,0 +1,11 @@
+-- [DB] Chính sách bảo mật cấp dòng (RLS) và cấp cột (Column-level Grant) · tài liệu mục 4.4 và mục 6 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng và chính sách sẽ thiết lập trong tệp này:
+-- 1. Bật ROW LEVEL SECURITY (RLS) cho tất cả 26 bảng
+-- 2. REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+-- 3. GRANT quyền hạn chọn lọc (SELECT, INSERT, UPDATE) theo bảng cho authenticated
+-- 4. Chính sách RLS cho profiles, classes, class_students, learning_requirements, projects
+-- 5. Chính sách RLS cho groups, group_members, tasks, task_events, group_messages
+-- 6. Chính sách RLS cho bars_criteria, bars_levels, bars_level_points (học sinh không SELECT được điểm quy đổi)
+-- 7. Chính sách RLS cho evaluation_rounds, peer_reviews, peer_review_answers, peer_scores
+-- 8. Chính sách RLS cho group_scores, final_scores, research_consents, audit_logs
+-- 9. Phân quyền UPDATE theo cột (REVOKE UPDATE và GRANT UPDATE chỉ các cột cho phép) cho tasks, peer_reviews

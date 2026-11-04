@@ -1,0 +1,63 @@
+{
+  "reviewScore": [
+    {
+      "name": "Trọng số 1, 1, 2 với điểm 8, 10, 6 cho kết quả 7.5",
+      "answers": [
+        { "weight": 1, "points": 8 },
+        { "weight": 1, "points": 10 },
+        { "weight": 2, "points": 6 }
+      ],
+      "expected": 7.5
+    }
+  ],
+  "peerScore": [
+    {
+      "name": "Trung bình cộng các phiếu đã nộp",
+      "reviewScores": [7.5, 8.5],
+      "expected": 8.0
+    },
+    {
+      "name": "Mảng rỗng trả về null",
+      "reviewScores": [],
+      "expected": null
+    }
+  ],
+  "finalScore": [
+    {
+      "name": "weightGroup = 0.6, groupScore = 8.5, peerScore = 7.0 cho 7.9",
+      "input": {
+        "groupScore": 8.5,
+        "peerScore": 7.0,
+        "weightGroup": 0.6
+      },
+      "expected": 7.9
+    },
+    {
+      "name": "Thiếu điểm đồng đẳng (peerScore null) trả về điểm nhóm",
+      "input": {
+        "groupScore": 8.5,
+        "peerScore": null,
+        "weightGroup": 0.6
+      },
+      "expected": 8.5
+    },
+    {
+      "name": "Biên weightGroup = 0 (hoàn toàn theo điểm đồng đẳng)",
+      "input": {
+        "groupScore": 8.5,
+        "peerScore": 7.0,
+        "weightGroup": 0
+      },
+      "expected": 7.0
+    },
+    {
+      "name": "Biên weightGroup = 1 (hoàn toàn theo điểm nhóm)",
+      "input": {
+        "groupScore": 8.5,
+        "peerScore": 7.0,
+        "weightGroup": 1
+      },
+      "expected": 8.5
+    }
+  ]
+}

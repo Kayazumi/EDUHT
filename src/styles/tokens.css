@@ -1,0 +1,25 @@
+/* [FE] Biến kiểu dáng giao diện và token màu sắc · tài liệu mục 7.13 */
+:root {
+  /* Màu trạng thái thẻ Kanban */
+  --status-todo: #64748b;
+  --status-todo-bg: #f8fafc;
+  --status-doing: #2563eb;
+  --status-doing-bg: #eff6ff;
+  --status-done: #16a34a;
+  --status-done-bg: #f0fdf4;
+  --status-late: #dc2626;
+  --status-late-bg: #fef2f2;
+
+  /* Bố cục và khoảng cách */
+  --sidebar-width: 260px;
+  --topbar-height: 64px;
+  --board-column-width: 320px;
+
+  /* Cỡ chữ cơ bản */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+}

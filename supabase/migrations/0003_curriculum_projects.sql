@@ -1,0 +1,7 @@
+-- [DB] Yêu cầu cần đạt, dự án và kho nhiệm vụ · tài liệu mục 4.4 và 5.3 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Table: learning_requirements (danh mục YCCĐ theo chương trình Tin học THPT)
+-- 2. Table: projects (dự án học tập, thời gian, số thành viên, trọng số điểm a, b)
+-- 3. Table: task_templates (kho nhiệm vụ mẫu của dự án)
+-- 4. Table: task_template_requirements (bảng ánh xạ N-N giữa nhiệm vụ mẫu và YCCĐ)
+-- 5. Foreign keys, check constraints và trigger khóa cấu hình dự án

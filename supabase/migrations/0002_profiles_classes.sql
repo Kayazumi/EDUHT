@@ -1,0 +1,7 @@
+-- [DB] Tài khoản, lớp học và ghi danh · tài liệu mục 4.4 và 5.3 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Table: profiles (liên kết 1-1 với auth.users, lưu trữ vai trò, họ tên, trạng thái)
+-- 2. Table: classes (lớp học, năm học, khối, giáo viên phụ trách)
+-- 3. Table: class_students (bảng ghi danh N-N giữa học sinh và lớp)
+-- 4. Trigger: handle_new_user (tự động tạo bản ghi profiles khi có tài khoản mới trong auth.users)
+-- 5. Foreign keys, check constraints và unique constraints tương ứng

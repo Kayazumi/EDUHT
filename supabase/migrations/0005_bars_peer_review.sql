@@ -1,0 +1,10 @@
+-- [DB] Thang BARS, đợt đánh giá, phiếu đánh giá đồng đẳng và điểm ĐĐ · tài liệu mục 4.4 và 5.5 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Table: bars_criteria (tiêu chí hành vi: mẫu admin hoặc tiêu chí dự án)
+-- 2. Table: bars_levels (mô tả hành vi 4 mức cho từng tiêu chí - học sinh nhìn thấy)
+-- 3. Table: bars_level_points (điểm quy đổi từng mức - bảo mật, ẩn với học sinh)
+-- 4. Table: evaluation_rounds (đợt đánh giá đồng đẳng, thời gian mở/đóng, trạng thái)
+-- 5. Table: peer_reviews (phiếu đánh giá định danh: rater_id, ratee_id, comment, submitted_at)
+-- 6. Table: peer_review_answers (câu trả lời mức hành vi cho từng tiêu chí)
+-- 7. Table: peer_scores (ảnh chụp Điểm_ĐĐ khi chốt đợt finalize_round)
+-- 8. Ràng buộc bất biến INV-03, INV-04, INV-07

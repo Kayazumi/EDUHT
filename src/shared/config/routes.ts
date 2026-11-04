@@ -1,0 +1,48 @@
+// [CHUNG] Bảng địa chỉ trang · tài liệu mục 7.3
+
+export const routes = {
+  home: "/",
+  auth: {
+    login: "/login",
+    changePassword: "/change-password",
+    forbidden: "/forbidden",
+  },
+  admin: {
+    dashboard: "/admin",
+    users: "/admin/users",
+    newUser: "/admin/users/new",
+    importUsers: "/admin/users/import",
+    userDetail: (userId: string) => `/admin/users/${userId}`,
+    classes: "/admin/classes",
+    classDetail: (classId: string) => `/admin/classes/${classId}`,
+    curriculum: "/admin/curriculum",
+    barsTemplates: "/admin/bars-templates",
+    research: "/admin/research",
+    auditLog: "/admin/audit-log",
+  },
+  teacher: {
+    dashboard: "/teacher",
+    classes: (classId: string) => `/teacher/classes/${classId}`,
+    importStudents: (classId: string) => `/teacher/classes/${classId}/students/import`,
+    projects: "/teacher/projects",
+    newProject: "/teacher/projects/new",
+    projectDetail: (projectId: string) => `/teacher/projects/${projectId}`,
+    tasks: (projectId: string) => `/teacher/projects/${projectId}/tasks`,
+    groups: (projectId: string) => `/teacher/projects/${projectId}/groups`,
+    groupDetail: (projectId: string, groupId: string) => `/teacher/projects/${projectId}/groups/${groupId}`,
+    projectDashboard: (projectId: string) => `/teacher/projects/${projectId}/dashboard`,
+    evaluation: (projectId: string) => `/teacher/projects/${projectId}/evaluation`,
+    evaluationRound: (projectId: string, roundId: string) => `/teacher/projects/${projectId}/evaluation/${roundId}`,
+    grading: (projectId: string) => `/teacher/projects/${projectId}/grading`,
+    export: (projectId: string) => `/teacher/projects/${projectId}/export`,
+  },
+  student: {
+    dashboard: "/student",
+    profile: "/student/profile",
+    projectDetail: (projectId: string) => `/student/projects/${projectId}`,
+    board: (projectId: string) => `/student/projects/${projectId}/board`,
+    review: (projectId: string) => `/student/projects/${projectId}/review`,
+    reviewRatee: (projectId: string, rateeId: string) => `/student/projects/${projectId}/review/${rateeId}`,
+    results: (projectId: string) => `/student/projects/${projectId}/results`,
+  },
+} as const;

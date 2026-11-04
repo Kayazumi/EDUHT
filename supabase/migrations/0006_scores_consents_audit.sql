@@ -1,0 +1,10 @@
+-- [DB] Điểm số, đồng ý nghiên cứu và nhật ký kiểm toán · tài liệu mục 4.4 và 5.6 · TODO: hiện thực DDL ở giai đoạn sau
+-- Danh sách đối tượng sẽ tạo trong tệp này:
+-- 1. Table: group_scores (Điểm_nhóm do giáo viên chấm theo Rubric)
+-- 2. Table: final_scores (Điểm_CN: chụp điểm nhóm, điểm ĐĐ, trọng số a, b, snapshot tiến trình, điểm chỉnh)
+-- 3. Table: score_events (lịch sử biến động điểm: computed, adjusted, published, unpublished - chỉ ghi thêm)
+-- 4. Table: research_consents (trạng thái đồng ý tham gia nghiên cứu hiện hành của học sinh)
+-- 5. Table: research_consent_events (lịch sử đồng ý nghiên cứu - chỉ ghi thêm)
+-- 6. Table: research_exports (nhật ký các lần xuất dữ liệu giả danh cho nghiên cứu - chỉ ghi thêm)
+-- 7. Table: audit_logs (nhật ký thao tác quản trị hệ thống - chỉ ghi thêm)
+-- 8. Ràng buộc bất biến INV-05, INV-06, INV-08, INV-09, INV-10, INV-11, INV-12

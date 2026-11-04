@@ -1,0 +1,44 @@
+# [OPS] GitHub Actions CI workflow · tài liệu mục 4.2
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build Next.js
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
+          STUDENT_EMAIL_DOMAIN: hs.pbl.example
+          CRON_SECRET: dummy-cron-secret
+          EXPORT_PSEUDONYM_SECRET: dummy-export-secret
+          EXPORT_PSEUDONYM_KEY_VERSION: "1"
+        run: npm run build

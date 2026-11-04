@@ -1,0 +1,7 @@
+<!-- [FE] Logo nền sáng · tài liệu mục 4.10 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="48" viewBox="0 0 160 48" fill="none">
+  <rect x="4" y="8" width="32" height="32" rx="8" fill="#2563eb"/>
+  <path d="M14 16h6a4 4 0 0 1 0 8h-6v8h-3V16h3zm0 5h6a1.5 1.5 0 0 0 0-3h-6v3z" fill="#ffffff"/>
+  <text x="44" y="30" fill="#0f172a" font-family="sans-serif" font-size="20" font-weight="bold">PBL</text>
+  <text x="88" y="30" fill="#64748b" font-family="sans-serif" font-size="16">Platform</text>
+</svg>

@@ -1,0 +1,11 @@
+-- [DB] Dữ liệu mẫu (Seed Data) cho môi trường dev · tài liệu mục 4.4 · TODO: hiện thực ở giai đoạn sau
+-- Bao gồm:
+-- 1 tài khoản Admin
+-- 2 tài khoản Giáo viên
+-- 2 lớp học (mỗi lớp 35 học sinh giả)
+-- 1 dự án mẫu
+-- 1 bộ tiêu chí BARS mặc định 4 mức
+-- Danh mục YCCĐ trích từ Chương trình GDPT 2018 môn Tin học (Thông tư 32/2018/TT-BGDĐT)
+
+-- Placeholder:
+-- insert into profiles ...

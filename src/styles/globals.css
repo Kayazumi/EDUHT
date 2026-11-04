@@ -1,0 +1,12 @@
+/* [FE] Kiểu dáng toàn cục ứng dụng · tài liệu mục 7.13 */
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./print.css";
+
+@layer base {
+  body {
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
