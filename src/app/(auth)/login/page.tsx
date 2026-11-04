@@ -102,6 +102,39 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* Hướng dẫn tài khoản demo */}
+        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+          <p className="font-semibold mb-1.5 flex items-center gap-1.5">
+            <span>🔑</span> <span>Tài khoản mẫu dùng thử:</span>
+          </p>
+          <div className="space-y-1 font-mono text-[11px]">
+            <div 
+              onClick={() => { setUsername("admin"); setPassword("admin123"); }}
+              className="flex justify-between items-center p-1 rounded hover:bg-amber-100 cursor-pointer transition-colors"
+              title="Bấm để điền nhanh"
+            >
+              <span>🛡️ Admin: <strong>admin</strong></span>
+              <span className="text-amber-700">Pass: <strong>admin123</strong> (điền ↗)</span>
+            </div>
+            <div 
+              onClick={() => { setUsername("gv.lan"); setPassword("123456"); }}
+              className="flex justify-between items-center p-1 rounded hover:bg-amber-100 cursor-pointer transition-colors"
+              title="Bấm để điền nhanh"
+            >
+              <span>👨‍🏫 GV: <strong>gv.lan</strong></span>
+              <span className="text-amber-700">Pass: <strong>123456</strong> (điền ↗)</span>
+            </div>
+            <div 
+              onClick={() => { setUsername("hs.an01"); setPassword("123456"); }}
+              className="flex justify-between items-center p-1 rounded hover:bg-amber-100 cursor-pointer transition-colors"
+              title="Bấm để điền nhanh"
+            >
+              <span>🎓 HS: <strong>hs.an01</strong></span>
+              <span className="text-amber-700">Pass: <strong>123456</strong> (điền ↗)</span>
+            </div>
+          </div>
+        </div>
+
         {/* Khối xem thử nhanh theo vai trò */}
         <div className="mt-6 pt-6 border-t border-slate-200 space-y-3">
           <div className="text-center">

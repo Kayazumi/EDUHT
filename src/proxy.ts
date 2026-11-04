@@ -45,7 +45,10 @@ export async function proxy(request: NextRequest) {
   }
 
   // 2.2 Đã có phiên truy cập /login hoặc trang chủ /
-  if (pathname === "/login" || pathname === "/") {
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL(`/${role}`, request.url));
+  }
+  if (pathname === "/login" && user) {
     return NextResponse.redirect(new URL(`/${role}`, request.url));
   }
 

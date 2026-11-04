@@ -16,7 +16,36 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
     }
 
     const { username, password } = parsed.data;
-    const email = username.includes("@") ? username : `${username}@pbl.internal`;
+    const cleanUsername = username.trim().toLowerCase();
+
+    // 1. Hỗ trợ tài khoản Demo xem trước hệ thống
+    const demoAccounts: Record<string, { role: string; validPass: string[] }> = {
+      admin: { role: "admin", validPass: ["admin123", "123456", "admin"] },
+      "admin@pbl.internal": { role: "admin", validPass: ["admin123", "123456", "admin"] },
+      "gv.lan": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
+      "gv.lan@pbl.internal": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
+      teacher: { role: "teacher", validPass: ["123456", "teacher123"] },
+      "hs.an01": { role: "student", validPass: ["123456", "student123"] },
+      "hs.an01@pbl.internal": { role: "student", validPass: ["123456", "student123"] },
+      student: { role: "student", validPass: ["123456", "student123"] },
+    };
+
+    const demo = demoAccounts[cleanUsername];
+    if (demo) {
+      if (demo.validPass.includes(password)) {
+        const cookieStore = await cookies();
+        cookieStore.set("pbl_demo_role", demo.role, { path: "/", maxAge: 86400 });
+        return {
+          ok: true,
+          data: { role: demo.role, mustChangePassword: false },
+        };
+      } else {
+        return { ok: false, error: "Mật khẩu không chính xác cho tài khoản demo (thử: 123456 hoặc admin123)" };
+      }
+    }
+
+    // 2. Kết nối Supabase Auth thật
+    const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@pbl.internal`;
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
