@@ -6,14 +6,15 @@ import type { Role } from "@/shared/config/roles";
 
 export interface AppShellProps {
   role: Role;
+  userName?: string;
   title?: string;
   children: React.ReactNode;
 }
 
-export function AppShell({ role, title, children }: AppShellProps) {
+export function AppShell({ role, userName, title, children }: AppShellProps) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <Topbar role={role} />
+      <Topbar role={role} userName={userName} />
       <div className="flex flex-1">
         <Sidebar role={role} />
         <main className="flex-1 p-6 max-w-7xl mx-auto w-full">

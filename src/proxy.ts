@@ -1,12 +1,66 @@
 // [BE] Cổng kiểm tra phiên và vai trò (proxy/middleware) · tài liệu mục 7.12
 import { NextResponse, type NextRequest } from "next/server";
+import { updateSession } from "@/server/supabase/proxy-session";
+import type { Role } from "@/shared/config/roles";
 
-export async function proxy(_request: NextRequest) {
-  // TODO: làm mới phiên Supabase (updateSession)
-  // TODO: nếu chưa đăng nhập -> chuyển hướng /login
-  // TODO: nếu còn must_change_password -> chuyển hướng /change-password
-  // TODO: nếu truy cập sai tiền tố vai trò -> chuyển hướng /forbidden (/admin, /teacher, /student)
-  return NextResponse.next();
+const PUBLIC_PATHS = [
+  "/login",
+  "/forgot-password",
+  "/auth/callback",
+  "/forbidden",
+];
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  const isPublicPath = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path + "/"));
+
+  // 1. Cập nhật phiên từ Supabase cookie
+  const { response, user } = await updateSession(request);
+
+  if (!user) {
+    if (!isPublicPath) {
+      const loginUrl = new URL("/login", request.url);
+      if (pathname !== "/") {
+        loginUrl.searchParams.set("next", pathname);
+      }
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
+
+  // 2. Người dùng đã đăng nhập
+  const role = (user.app_metadata?.role as Role) || "student";
+  const mustChangePassword = !!user.app_metadata?.must_change_password;
+
+  // 2.1 Bắt buộc đổi mật khẩu nếu must_change_password = true
+  if (mustChangePassword && pathname !== "/change-password" && !isPublicPath) {
+    return NextResponse.redirect(new URL("/change-password", request.url));
+  }
+
+  if (!mustChangePassword && pathname === "/change-password") {
+    return NextResponse.redirect(new URL(`/${role}/dashboard`, request.url));
+  }
+
+  // 2.2 Đã đăng nhập truy cập /login hoặc trang chủ /
+  if (pathname === "/login" || pathname === "/") {
+    return NextResponse.redirect(new URL(`/${role}/dashboard`, request.url));
+  }
+
+  // 2.3 Phân quyền tiền tố URL (Scenario 12: gõ tay /teacher khi là student -> /forbidden)
+  if (pathname.startsWith("/admin") && role !== "admin") {
+    return NextResponse.redirect(new URL("/forbidden", request.url));
+  }
+
+  if (pathname.startsWith("/teacher") && role !== "teacher") {
+    return NextResponse.redirect(new URL("/forbidden", request.url));
+  }
+
+  if (pathname.startsWith("/student") && role !== "student") {
+    return NextResponse.redirect(new URL("/forbidden", request.url));
+  }
+
+  return response;
 }
 
 export const config = {

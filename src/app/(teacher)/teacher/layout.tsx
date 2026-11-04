@@ -1,8 +1,14 @@
 // [FE] Khung bố cục Giáo viên · tài liệu mục 4.5
 import React from "react";
+import { requireRole } from "@/server/auth/guards";
+import { AppShell } from "@/components/layout/app-shell";
 
-// TODO: requireRole('teacher')
+export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
+  const profile = await requireRole("teacher");
 
-export default function TeacherLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <AppShell role="teacher" userName={profile.fullName || profile.username}>
+      {children}
+    </AppShell>
+  );
 }
