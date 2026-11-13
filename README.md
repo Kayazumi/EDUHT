@@ -142,16 +142,173 @@ Sau khi PR được merge, cập nhật nhánh chính bằng git switch main r�
 
 Ứng dụng web đang được triển khai trên Vercel và dùng Supabase hosted. Cấu hình biến môi trường production trong Vercel Project Settings. Cron trong vercel.json gọi /api/cron/keepalive; nếu tự host bằng Docker, cron không tự chạy và cần scheduler bên ngoài nếu muốn duy trì tác vụ này.
 
-## Cấu trúc thư mục
++## Cây thư mục và nhiệm vụ của từng file
+
+Cây dưới đây được đối chiếu với mã nguồn hiện có. Ghi chú sau mỗi file cho biết file giữ trách nhiệm gì; khi làm tính năng, hãy tìm đúng tầng trước khi sửa (trang giao diện → component/hook → server action → Supabase).
 
 ```text
-src/                  # Next.js pages, components, server actions và API
-  app/                # Trang theo vai trò và API routes
-  components/         # UI dùng lại
-  server/             # Xác thực, server actions, tích hợp Supabase
-  shared/              # Types, config, validation, utils
-supabase/migrations/  # Migration schema PostgreSQL
-scripts/              # Script seed/import/export
-tests/                # Unit, concurrency và E2E tests
-docs/                 # Tài liệu kỹ thuật
+EDUHT/
+├── .github/workflows/              # GitHub Actions (CI)
+├── docs/                            # Tài liệu kiến trúc, database và nghiên cứu
+├── public/                          # Ảnh, icon, file tải xuống; phục vụ tĩnh
+├── scripts/                         # Script chạy ngoài ứng dụng
+├── src/                             # Mã nguồn Next.js
+├── supabase/                        # Migration, seed và kiểm thử PostgreSQL
+├── tests/                           # Kiểm thử ứng dụng
+├── .dockerignore                    # Loại file bí mật/cache khỏi Docker build context
+├── .env.example                     # Mẫu tên biến môi trường, không có secret
+├── AGENTS.md                        # Hướng dẫn cho Codex/AI khi sửa repo
+├── compose.yaml                     # Chạy môi trường development bằng Docker
+├── compose.production.yaml           # Chạy image production bằng Docker
+├── Dockerfile                       # Build image development/production theo nhiều stage
+├── eslint.config.mjs                # Quy tắc ESLint
+├── next.config.ts                   # Cấu hình Next.js, standalone output và headers
+├── package.json                     # Scripts và dependencies của dự án
+├── package-lock.json                # Khóa chính xác phiên bản npm dependencies
+├── playwright.config.ts             # Cấu hình E2E Playwright
+├── postcss.config.mjs               # Nạp Tailwind/PostCSS
+├── README.md                        # Hướng dẫn và bản đồ mã nguồn này
+├── tsconfig.json                    # Cấu hình TypeScript và alias
+├── vercel.json                      # Cấu hình triển khai và lịch Vercel Cron
+└── vitest.config.ts                 # Cấu hình Vitest
 ```
+
+### Ứng dụng Next.js — src/app/
+
+Tên thư mục đặt trong ngoặc như (admin) là route group của Next.js: dùng để tổ chức code/layout, không xuất hiện trong URL.
+
+```text
+src/app/
+├── layout.tsx                       # HTML/layout gốc, CSS toàn cục và metadata
+├── page.tsx                         # Trang gốc, điều hướng người dùng theo phiên/vai trò
+├── loading.tsx                      # UI chờ ở cấp ứng dụng
+├── error.tsx                        # Ranh giới lỗi chung của ứng dụng
+├── not-found.tsx                    # Trang 404
+├── forbidden/page.tsx               # Trang báo không đủ quyền (403)
+├── (auth)/
+│   ├── login/page.tsx               # Form đăng nhập và nút xem trước dev
+│   └── change-password/page.tsx     # Đổi mật khẩu bắt buộc lần đầu
+├── (admin)/admin/
+│   ├── layout.tsx                   # Khung và kiểm tra quyền admin
+│   ├── page.tsx                     # Dashboard admin
+│   ├── users/page.tsx               # Danh sách tài khoản
+│   ├── users/new/page.tsx           # Tạo tài khoản
+│   ├── users/import/page.tsx        # Import tài khoản từ CSV
+│   ├── users/[userId]/page.tsx      # Chi tiết/kích hoạt/đặt lại tài khoản
+│   ├── classes/page.tsx             # Danh sách lớp
+│   ├── classes/[classId]/page.tsx   # Chi tiết lớp và thành viên
+│   ├── curriculum/page.tsx          # Quản lý yêu cầu cần đạt Tin học
+│   ├── bars-templates/page.tsx      # Quản lý tiêu chí và mẫu rubric BARS
+│   ├── research/page.tsx            # Theo dõi đồng thuận nghiên cứu
+│   └── audit-log/page.tsx           # Nhật ký hoạt động cần kiểm toán
+├── (teacher)/teacher/
+│   ├── layout.tsx                   # Khung và kiểm tra quyền giáo viên
+│   ├── page.tsx                     # Dashboard giáo viên
+│   ├── classes/[classId]/page.tsx   # Học sinh trong lớp phụ trách
+│   ├── classes/[classId]/students/import/page.tsx # Import học sinh vào lớp
+│   └── projects/
+│       ├── page.tsx                 # Danh sách dự án
+│       ├── new/page.tsx             # Tạo dự án
+│       └── [projectId]/
+│           ├── page.tsx             # Tổng quan và trạng thái dự án
+│           ├── tasks/page.tsx       # Mẫu nhiệm vụ và yêu cầu cần đạt
+│           ├── groups/page.tsx      # Tạo/quản lý nhóm
+│           ├── groups/[groupId]/page.tsx # Chi tiết nhóm
+│           ├── dashboard/page.tsx   # Biểu đồ tiến độ/đóng góp
+│           ├── evaluation/page.tsx  # Danh sách đợt đánh giá
+│           ├── evaluation/[roundId]/page.tsx # Tiến độ một đợt đánh giá
+│           ├── grading/page.tsx     # Tổng hợp, điều chỉnh và công bố điểm
+│           └── export/page.tsx      # Xuất dữ liệu/bảng điểm
+├── (student)/student/
+│   ├── layout.tsx                   # Khung và kiểm tra quyền học sinh
+│   ├── page.tsx                     # Dashboard học sinh
+│   ├── profile/page.tsx             # Hồ sơ và đồng thuận nghiên cứu
+│   └── projects/[projectId]/
+│       ├── page.tsx                 # Tổng quan dự án/nhóm
+│       ├── board/page.tsx           # Bảng công việc Kanban
+│       ├── review/page.tsx          # Các đợt và phiếu cần đánh giá
+│       ├── review/[rateeId]/page.tsx # Đánh giá một thành viên
+│       └── results/page.tsx         # Kết quả đã công bố
+└── api/
+    ├── cron/keepalive/route.ts      # Endpoint bảo vệ bằng CRON_SECRET
+    └── export/[projectId]/route.ts  # API xuất dữ liệu nghiên cứu
+```
+
+Ngoài App Router, src/proxy.ts xử lý request/phiên ở ranh giới trước khi trang được render.
+
+### Giao diện và hành vi dùng lại — src/components/, src/hooks/
+
+- components/layout/: app-shell.tsx dựng khung trang; sidebar.tsx và role-nav.tsx hiển thị điều hướng theo vai trò; topbar.tsx hiển thị thanh trên cùng và thao tác tài khoản.
+- components/ui/: button.tsx nút; input.tsx ô nhập; select.tsx danh sách chọn; badge.tsx nhãn trạng thái; dialog.tsx hộp thoại; table.tsx bảng; tabs.tsx tab; toast.tsx thông báo nổi; skeleton.tsx placeholder tải dữ liệu. Đây là thành phần dùng lại, nên sửa có thể ảnh hưởng nhiều trang.
+- components/forms/: user-form.tsx và project-form.tsx thu thập dữ liệu tài khoản/dự án; csv-upload.tsx chọn và xem trước CSV; due-date-picker.tsx chọn hạn chót.
+- components/kanban/: board.tsx là vùng bảng; column.tsx là cột trạng thái; task-card.tsx là thẻ nhiệm vụ; task-dialog.tsx hiển thị/chỉnh sửa chi tiết; assignee-picker.tsx chọn người nhận.
+- components/peer-review/: review-form.tsx nhập phiếu; bars-criterion-field.tsx chọn mức BARS; review-progress.tsx tiến độ nộp; round-status-badge.tsx trạng thái đợt; results-panel.tsx trình bày kết quả.
+- components/dashboard/: progress-chart.tsx biểu đồ; group-progress-card.tsx tiến độ nhóm; student-progress-table.tsx tiến độ từng học sinh; late-alert-list.tsx cảnh báo trễ; metric-compare.tsx so sánh chỉ số.
+- hooks/use-current-user.ts lấy người dùng hiện tại; use-portal-data.ts tải dữ liệu portal; use-countdown.ts đếm ngược hạn; use-board-realtime.ts hiện chỉ giữ state cục bộ, chưa đăng ký Supabase Realtime.
+
+### Xử lý phía máy chủ — src/server/
+
+- actions/auth.ts: đăng nhập, đăng xuất, đổi mật khẩu.
+- actions/portal-data.ts: tải dữ liệu cho các màn hình theo vai trò.
+- actions/users.ts: tạo/import/kích hoạt người dùng, đổi vai trò và đặt lại mật khẩu.
+- actions/classes.ts: tạo lớp, phân công giáo viên, ghi danh/xóa học sinh và lưu trữ lớp.
+- actions/projects.ts: tạo/sửa/kích hoạt/đóng/xóa dự án.
+- actions/groups.ts: tạo nhóm, thêm/xóa thành viên và khóa phân nhóm.
+- actions/task-templates.ts: quản lý mẫu nhiệm vụ và liên kết yêu cầu cần đạt.
+- actions/tasks.ts: tạo/sửa/giao việc, di chuyển trạng thái, đặt hạn và lưu trữ nhiệm vụ.
+- actions/bars.ts: tạo/sửa/xóa/sắp xếp tiêu chí BARS.
+- actions/rounds.ts: tạo/mở/đóng/gia hạn đợt đánh giá.
+- actions/reviews.ts: lưu nháp và nộp đánh giá đồng đẳng.
+- actions/grading.ts: nhập điểm nhóm, tính điểm cuối, điều chỉnh và công bố/thu hồi kết quả.
+- actions/consents.ts: ghi nhận/thu hồi đồng thuận.
+- actions/curriculum.ts: tạo/sửa/xóa yêu cầu cần đạt.
+- actions/export.ts: xử lý xuất dữ liệu từ phía máy chủ.
+- auth/session.ts đọc phiên và hồ sơ hiện tại; auth/guards.ts bảo vệ vai trò; auth/username.ts chuẩn hóa username và email nội bộ.
+- supabase/server.ts tạo client Supabase theo request/cookie; supabase/proxy-session.ts đồng bộ phiên trong Proxy; supabase/admin.ts tạo client quyền cao chỉ dùng ở server.
+- env.ts kiểm tra biến môi trường bí mật phía server.
+- csv/parse-students.ts đọc/kiểm tra CSV học sinh; csv/to-csv.ts tạo CSV tương thích Excel.
+
+Server Actions là điểm nối giữa UI và database. Khi thêm thao tác ghi dữ liệu, kiểm tra quyền ở server, validate đầu vào bằng schema Zod và dựa vào RLS/RPC; không gọi service-role key từ client.
+
+### Kiểu dữ liệu, quy tắc và tiện ích — src/shared/, src/styles/
+
+- config/roles.ts định nghĩa vai trò và trang mặc định; routes.ts tập trung URL; constants.ts chứa giới hạn/ngưỡng nghiệp vụ; public-env.ts đọc biến public.
+- types/domain.ts chứa kiểu nghiệp vụ; types/database.types.ts chứa kiểu schema Supabase.
+- validation/: auth.ts, user.ts, project.ts, task.ts, bars.ts, review.ts, grading.ts, consent.ts định nghĩa schema kiểm tra đầu vào tương ứng.
+- scoring/calc.ts tính điểm BARS/điểm tổng hợp; scoring/test-vectors.json chứa bộ dữ liệu mẫu cho thuật toán.
+- metrics/lateness.ts xác định nhiệm vụ trễ; metrics/progress.ts tính chỉ số tiến độ.
+- supabase/browser.ts tạo client Supabase dùng trong trình duyệt với publishable/anon key và RLS.
+- utils/errors.ts chuẩn hóa lỗi/ActionResult; utils/format.ts định dạng ngày giờ và điểm.
+- styles/globals.css nạp CSS ứng dụng; tokens.css chứa biến thiết kế; print.css định dạng bản in.
+
+### Database — supabase/
+
+- config.toml cấu hình Supabase local (API, PostgreSQL, Auth).
+- seed.sql hiện là placeholder/TODO, chưa có dữ liệu seed dùng được; lớp 10C4 và dự án PPT mẫu được tạo bởi scripts/seed-ppt-project.ts.
+- migrations/0001_extensions_enums.sql bật extension và kiểu enum nền.
+- migrations/0002_profiles_classes.sql tạo hồ sơ, lớp, quan hệ học sinh-lớp và đồng bộ user Auth.
+- migrations/0003_curriculum_projects.sql tạo yêu cầu cần đạt, dự án và mẫu nhiệm vụ.
+- migrations/0004_groups_tasks_logs.sql tạo nhóm, thành viên, nhiệm vụ, sự kiện và tin nhắn nhóm.
+- migrations/0005_bars_peer_review.sql tạo tiêu chí/mức BARS, đợt đánh giá và dữ liệu đánh giá chéo.
+- migrations/0006_scores_consents_audit.sql tạo điểm, đồng thuận, audit và sự kiện liên quan.
+- migrations/0007_functions_triggers.sql tạo hàm nghiệp vụ, trigger thời gian cập nhật, nhật ký và ràng buộc bất biến.
+- migrations/0008_rls_policies.sql bật RLS và định nghĩa quyền theo vai trò.
+- migrations/0009_views_rpc.sql tạo view/RPC cho các luồng dự án, đánh giá, chấm điểm và xuất dữ liệu.
+- migrations/0010_profile_codes.sql bổ sung/kiểm tra mã học sinh và nhân sự.
+- migrations/0011_service_role_profile_admin.sql điều chỉnh kiểm tra cập nhật hồ sơ cho thao tác quản trị bằng service role.
+- tests/rls_students.test.sql và rls_teachers.test.sql kiểm tra chính sách truy cập; scoring.test.sql kiểm tra điểm; immutability.test.sql kiểm tra dữ liệu bất biến.
+
+### Script, tài liệu, tài nguyên và kiểm thử
+
+- scripts/seed-ppt-project.ts tạo tài khoản và lớp/dự án PPT mẫu; cần Supabase URL, service-role key và mật khẩu ban đầu trong môi trường. Không chạy trên project dùng chung nếu chưa được trưởng nhóm duyệt.
+- scripts/import-students.ts nhập tài khoản học sinh từ dữ liệu CSV.
+- scripts/export-research-data.ts xuất dữ liệu phục vụ nghiên cứu.
+- scripts/backup-db.sh hỗ trợ sao lưu PostgreSQL qua môi trường có Bash và công cụ PostgreSQL.
+- docs/architecture.md mô tả kiến trúc; erd.md sơ đồ dữ liệu; rls-matrix.md ma trận quyền; research-ethics.md nguyên tắc dữ liệu nghiên cứu.
+- public/favicon.ico là favicon; images/branding/logo.svg và logo-dark.svg là logo sáng/tối, og-cover.png là ảnh chia sẻ; images/icons/status-*.svg là icon trạng thái Kanban; images/illustrations/empty-board.svg, empty-list.svg, error-404.svg, login-hero.svg minh họa bảng/danh sách trống, lỗi 404 và trang đăng nhập.
+- public/templates/students-import.csv là mẫu CSV nhập học sinh.
+- tests/unit/calc.test.ts kiểm thử tính điểm; csv.test.ts kiểm thử đọc CSV; lateness.test.ts kiểm thử hạn/trễ; validation.test.ts kiểm thử schema đầu vào.
+- tests/concurrency/finalize-round.test.ts kiểm tra tranh chấp khi đóng đợt đánh giá.
+- tests/e2e/access-control.spec.ts kiểm soát truy cập; kanban.spec.ts bảng việc; peer-review.spec.ts đánh giá đồng đẳng; publish-results.spec.ts công bố kết quả.
+- eslint.config.mjs quy tắc lint; playwright.config.ts cấu hình trình duyệt/E2E; vitest.config.ts cấu hình unit test; tsconfig.json cấu hình TypeScript; postcss.config.mjs cấu hình CSS.
+- .github/workflows/ci.yml chạy các bước kiểm tra tự động khi có thay đổi trên GitHub.
