@@ -1,7 +1,7 @@
 // [FE] Việc của tôi · tài liệu mục 3.3, 4.5 và A3.4
 "use client";
 
-import React, { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { usePortalData } from "@/hooks/use-portal-data";
@@ -36,15 +36,22 @@ interface ActiveProject {
   };
 }
 
+interface StudentDashboardData {
+  projects: { id: string; title: string; class_id: string }[];
+  tasks: { id: string; title: string; group_id: string; assignee_id: string | null; status: "todo" | "doing" | "done"; due_at: string | null }[];
+  groups: { id: string; project_id: string; name: string }[];
+  memberships: { project_id: string; group_id: string }[];
+  teachers: { id: string; full_name: string }[];
+  classes: { id: string; teacher_id: string }[];
+  rounds: { project_id: string; status: string; id: string; title: string; closes_at: string | null }[];
+}
+
 export default function StudentDashboardPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "doing" | "todo">("all");
 
-  const [activeProjects, setActiveProjects] = useState<ActiveProject[]>([]);
-  const [myTasks, setMyTasks] = useState<AssignedTask[]>([]);
-  const { data } = usePortalData<{ projects: any[]; tasks: any[]; groups: any[]; memberships: any[]; teachers: any[]; classes: any[]; rounds: any[] }>("studentDashboard");
-
-  React.useEffect(() => {
-    if (!data) return;
+  const { data } = usePortalData<StudentDashboardData>("studentDashboard");
+  const { activeProjects, myTasks } = useMemo(() => {
+    if (!data) return { activeProjects: [] as ActiveProject[], myTasks: [] as AssignedTask[] };
     const projects = new Map(data.projects.map((row) => [row.id, row]));
     const groups = new Map(data.groups.map((row) => [row.id, row]));
     const memberships = new Map(data.memberships.map((row) => [row.project_id, row]));
@@ -65,12 +72,12 @@ export default function StudentDashboardPage() {
         ...(round ? { reviewRound: { id: round.id, name: round.title, closesIn: round.closes_at ? new Date(round.closes_at).toLocaleString("vi-VN") : "", submittedCount: 0, totalPeers: 0 } } : {}),
       };
     });
-    setActiveProjects(projectCards);
-    setMyTasks(data.tasks.filter((task) => task.assignee_id && ["todo", "doing"].includes(task.status)).map((task) => {
+    const tasks = data.tasks.filter((task) => task.assignee_id && ["todo", "doing"].includes(task.status)).map((task) => {
       const group = groups.get(task.group_id);
-      const project = projects.get(group?.project_id);
+      const project = group ? projects.get(group.project_id) : undefined;
       return { id: task.id, title: task.title, projectId: project?.id ?? "", projectName: project?.title ?? "", groupId: group?.id ?? "", groupName: group?.name ?? "", status: task.status, dueDate: task.due_at ?? "", isOverdue: Boolean(task.due_at && new Date(task.due_at) < new Date()), curriculumTags: [] } as AssignedTask;
-    }));
+    });
+    return { activeProjects: projectCards, myTasks: tasks };
   }, [data]);
 
   const filteredTasks = myTasks.filter((t) => {

@@ -6,8 +6,16 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { usePortalData } from "@/hooks/use-portal-data";
 
+interface TeacherDashboardData {
+  classes: { id: string; name: string; grade: number }[];
+  projects: { id: string; class_id: string; title: string; status: "draft" | "active" | "closed" }[];
+  memberships: { class_id: string; student_id: string }[];
+  groupProgress: { project_id: string; completion_rate: number | string | null; overdue_rate: number | string | null }[];
+  rounds: { project_id: string; status: string; title: string; closes_at: string | null }[];
+}
+
 export default function TeacherDashboardPage() {
-  const { data, error } = usePortalData<{ classes: any[]; projects: any[]; memberships: any[]; groupProgress: any[]; rounds: any[] }>("teacherDashboard");
+  const { data, error } = usePortalData<TeacherDashboardData>("teacherDashboard");
   const classes = data?.classes ?? [];
   const projects = data?.projects ?? [];
   const myClasses = classes.map((cls) => ({
@@ -28,7 +36,7 @@ export default function TeacherDashboardPage() {
       overdueGroupsCount: groups.filter((item) => Number(item.overdue_rate ?? 0) > 0).length,
       totalGroups: groups.length,
       evaluationRound: round
-        ? { title: round.title, status: round.status, closesIn: new Date(round.closes_at).toLocaleString("vi-VN"), submittedPercent: 0 }
+        ? { title: round.title, status: round.status, closesIn: round.closes_at ? new Date(round.closes_at).toLocaleString("vi-VN") : "—", submittedPercent: 0 }
         : { title: "Chưa mở đợt đánh giá", status: "draft", closesIn: "—", submittedPercent: 0 },
     };
   });

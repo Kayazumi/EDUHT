@@ -1,7 +1,7 @@
 // [FE] Danh sách dự án giáo viên · tài liệu mục 3.3, 4.5 và A3.3
 "use client";
 
-import React, { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { usePortalData } from "@/hooks/use-portal-data";
@@ -18,22 +18,26 @@ interface ProjectItem {
   groupsCount: number;
 }
 
+interface TeacherProjectsData {
+  projects: { id: string; title: string; class_id: string; status: "draft" | "active" | "closed"; starts_on: string; due_on: string }[];
+  classes: { id: string; name: string }[];
+  groupProgress: { project_id: string; completion_rate: number | string | null }[];
+}
+
 export default function TeacherProjectsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
-  const { data, error, refresh } = usePortalData<{ projects: any[]; classes: any[]; groupProgress: any[] }>("teacherProjects");
-
-  React.useEffect(() => {
-    if (!data) return;
+  const { data, error, refresh } = usePortalData<TeacherProjectsData>("teacherProjects");
+  const projects = useMemo<ProjectItem[]>(() => {
+    if (!data) return [];
     const classById = new Map(data.classes.map((item) => [item.id, item]));
-    const progressByProject = new Map<string, any[]>();
+    const progressByProject = new Map<string, TeacherProjectsData["groupProgress"]>();
     for (const item of data.groupProgress) {
       const list = progressByProject.get(item.project_id) ?? [];
       list.push(item);
       progressByProject.set(item.project_id, list);
     }
-    setProjects(data.projects.map((project) => {
+    return data.projects.map((project) => {
       const groups = progressByProject.get(project.id) ?? [];
       const classInfo = classById.get(project.class_id);
       return {
@@ -46,7 +50,7 @@ export default function TeacherProjectsPage() {
         progressPercent: groups.length ? Math.round(groups.reduce((sum, g) => sum + Number(g.completion_rate ?? 0), 0) / groups.length * 100) : 0,
         groupsCount: groups.length,
       };
-    }));
+    });
   }, [data]);
 
   const handleDelete = async (id: string, title: string, status: string) => {
@@ -86,6 +90,8 @@ export default function TeacherProjectsPage() {
           + Khởi tạo dự án mới
         </Link>
       </div>
+
+      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
       {/* Bộ lọc */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">

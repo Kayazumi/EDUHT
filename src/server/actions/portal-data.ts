@@ -35,7 +35,12 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
 
   try {
     const db = await createClient();
-    type DataRow = any;
+    type DataRow = Record<string, unknown>;
+    const rowString = (row: DataRow, key: string): string => {
+      const value = row[key];
+      if (typeof value !== "string") throw new Error(`Thiếu dữ liệu ${key} trong kết quả truy vấn`);
+      return value;
+    };
     const query = async (table: string, columns = "*"): Promise<DataRow[]> => {
       const { data, error } = await db.from(table).select(columns);
       if (error) throw error;
@@ -81,15 +86,15 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       case "adminClass": {
         const cls = await one("classes", "id", id);
         const students = await filtered("class_students", "class_id", id);
-        const studentProfiles = await ids("profiles", "id", students.map((row: { student_id: string }) => row.student_id));
+        const studentProfiles = await ids("profiles", "id", students.map((row) => rowString(row, "student_id")));
         const projects = await filtered("projects", "class_id", id);
         return { ok: true, data: { class: cls, students: studentProfiles, projects } };
       }
       case "adminCurriculum": return { ok: true, data: await query("learning_requirements") };
       case "adminBars": {
         const criteria = await filtered("bars_criteria", "is_template", "true");
-        const levels = await ids("bars_levels", "criterion_id", criteria.map((row: { id: string }) => row.id));
-        const points = await ids("bars_level_points", "criterion_id", criteria.map((row: { id: string }) => row.id));
+        const levels = await ids("bars_levels", "criterion_id", criteria.map((row) => rowString(row, "id")));
+        const points = await ids("bars_level_points", "criterion_id", criteria.map((row) => rowString(row, "id")));
         return { ok: true, data: { criteria, levels, points } };
       }
       case "adminResearch": {
@@ -100,9 +105,9 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       case "teacherDashboard":
       case "teacherProjects": {
         const classes = await filtered("classes", "teacher_id", profile.id);
-        const projects = await ids("projects", "class_id", classes.map((row: { id: string }) => row.id));
-        const memberships = await ids("class_students", "class_id", classes.map((row: { id: string }) => row.id));
-        const projectIds = projects.map((row: { id: string }) => row.id);
+        const projects = await ids("projects", "class_id", classes.map((row) => rowString(row, "id")));
+        const memberships = await ids("class_students", "class_id", classes.map((row) => rowString(row, "id")));
+        const projectIds = projects.map((row) => rowString(row, "id"));
         const [groupProgress, rounds] = await Promise.all([
           ids("v_group_progress", "project_id", projectIds), ids("evaluation_rounds", "project_id", projectIds),
         ]);
@@ -111,7 +116,7 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       case "teacherClass": {
         const cls = await one("classes", "id", id);
         const students = await filtered("class_students", "class_id", id);
-        const studentProfiles = await ids("profiles", "id", students.map((row: { student_id: string }) => row.student_id));
+        const studentProfiles = await ids("profiles", "id", students.map((row) => rowString(row, "student_id")));
         const projects = await filtered("projects", "class_id", id);
         return { ok: true, data: { class: cls, students: studentProfiles, projects } };
       }
@@ -122,20 +127,23 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       }
       case "teacherTemplates": {
         const templates = await filtered("task_templates", "project_id", id);
-        const links = await ids("task_template_requirements", "template_id", templates.map((row: { id: string }) => row.id));
-        const requirements = await ids("learning_requirements", "id", links.map((row: { requirement_id: string }) => row.requirement_id));
+        const links = await ids("task_template_requirements", "template_id", templates.map((row) => rowString(row, "id")));
+        const requirements = await ids("learning_requirements", "id", links.map((row) => rowString(row, "requirement_id")));
         return { ok: true, data: { templates, links, requirements } };
       }
       case "teacherGroups": {
         const [groups, project] = await Promise.all([filtered("groups", "project_id", id), one("projects", "id", id)]);
-        const [members, students] = await Promise.all([ids("group_members", "group_id", groups.map((row: { id: string }) => row.id)), project ? filtered("class_students", "class_id", (project as { class_id: string }).class_id) : Promise.resolve([])]);
-        const profiles = await ids("profiles", "id", students.map((row: { student_id: string }) => row.student_id));
+        const [members, students] = await Promise.all([
+          ids("group_members", "group_id", groups.map((row) => rowString(row, "id"))),
+          project ? filtered("class_students", "class_id", rowString(project, "class_id")) : Promise.resolve([]),
+        ]);
+        const profiles = await ids("profiles", "id", students.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { groups, members, students: profiles } };
       }
       case "teacherGroup": {
         const group = await one("groups", "id", childId);
         const [tasks, events, members] = await Promise.all([filtered("tasks", "group_id", childId), filtered("task_events", "group_id", childId), filtered("group_members", "group_id", childId)]);
-        const profiles = await ids("profiles", "id", members.map((row: { student_id: string }) => row.student_id));
+        const profiles = await ids("profiles", "id", members.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { group, tasks, events, members: profiles } };
       }
       case "teacherProgress": {
@@ -150,36 +158,36 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
         const round = await one("evaluation_rounds", "id", childId);
         const reviews = await filtered("peer_reviews", "round_id", childId);
         const members = await filtered("group_members", "project_id", id);
-        const profiles = await ids("profiles", "id", members.map((row: { student_id: string }) => row.student_id));
+        const profiles = await ids("profiles", "id", members.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { round, reviews, profiles } };
       }
       case "teacherGrading": {
         const groups = await filtered("groups", "project_id", id);
         const scores = await filtered("final_scores", "project_id", id);
-        const groupScores = await ids("group_scores", "group_id", groups.map((row: { id: string }) => row.id));
+        const groupScores = await ids("group_scores", "group_id", groups.map((row) => rowString(row, "id")));
         const members = await filtered("group_members", "project_id", id);
-        const profiles = await ids("profiles", "id", members.map((row: { student_id: string }) => row.student_id));
+        const profiles = await ids("profiles", "id", members.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { groups, scores, groupScores, members, profiles } };
       }
       case "teacherExport": {
         const scores = await filtered("final_scores", "project_id", id);
-        const groups = await ids("groups", "id", [...new Set(scores.map((row: { group_id: string }) => row.group_id))]);
-        const profiles = await ids("profiles", "id", scores.map((row: { student_id: string }) => row.student_id));
+        const groups = await ids("groups", "id", [...new Set(scores.map((row) => rowString(row, "group_id")))]);
+        const profiles = await ids("profiles", "id", scores.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { scores, groups, profiles } };
       }
       case "studentDashboard":
       case "studentProfile": {
         const memberships = await filtered("group_members", "student_id", profile.id);
-        const projects = await ids("projects", "id", memberships.map((row: { project_id: string }) => row.project_id));
-        const groupIds = [...new Set(memberships.map((row: { group_id: string }) => row.group_id))];
+        const projects = await ids("projects", "id", memberships.map((row) => rowString(row, "project_id")));
+        const groupIds = [...new Set(memberships.map((row) => rowString(row, "group_id")))];
         const [tasks, consents, rounds, groups] = await Promise.all([
           ids("tasks", "group_id", groupIds), filtered("research_consents", "student_id", profile.id),
-          projects.length ? ids("evaluation_rounds", "project_id", projects.map((row: { id: string }) => row.id)) : Promise.resolve([]),
+          projects.length ? ids("evaluation_rounds", "project_id", projects.map((row) => rowString(row, "id"))) : Promise.resolve([]),
           ids("groups", "id", groupIds),
         ]);
-        const classes = await ids("classes", "id", projects.map((row: { class_id: string }) => row.class_id));
-        const teachers = await ids("profiles", "id", classes.map((row: { teacher_id: string }) => row.teacher_id));
-        const groupProgress = projects.length ? await ids("v_group_progress", "project_id", projects.map((row: { id: string }) => row.id)) : [];
+        const classes = await ids("classes", "id", projects.map((row) => rowString(row, "class_id")));
+        const teachers = await ids("profiles", "id", classes.map((row) => rowString(row, "teacher_id")));
+        const groupProgress = projects.length ? await ids("v_group_progress", "project_id", projects.map((row) => rowString(row, "id"))) : [];
         return { ok: true, data: { profile, memberships, projects, tasks, consents, rounds, groups, classes, teachers, groupProgress } };
       }
       case "studentProject":
@@ -196,10 +204,10 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       }
       case "studentReview": {
         const memberships = await filtered("group_members", "student_id", profile.id);
-        const projectIds = memberships.map((row: { project_id: string }) => row.project_id);
+        const projectIds = memberships.map((row) => rowString(row, "project_id"));
         const rounds = await ids("evaluation_rounds", "project_id", projectIds);
         const reviews = rounds.length ? await filtered("peer_reviews", "rater_id", profile.id) : [];
-        const profiles = await ids("profiles", "id", [...new Set(reviews.map((row: { ratee_id: string }) => row.ratee_id))]);
+        const profiles = await ids("profiles", "id", [...new Set(reviews.map((row) => rowString(row, "ratee_id")))]);
         return { ok: true, data: { rounds, reviews, profiles } };
       }
       case "studentReviewForm": {
@@ -210,7 +218,7 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
           filtered("bars_criteria", "project_id", review.data.project_id), filtered("peer_review_answers", "review_id", review.data.id),
           one("profiles", "id", childId, "id,full_name"),
         ]);
-        const levels = await ids("bars_levels", "criterion_id", criteria.map((row: { id: string }) => row.id));
+        const levels = await ids("bars_levels", "criterion_id", criteria.map((row) => rowString(row, "id")));
         return { ok: true, data: { review: review.data, criteria, levels, answers, ratee } };
       }
       case "studentResults": {

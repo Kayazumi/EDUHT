@@ -60,12 +60,7 @@ const eslintConfig = defineConfig([
               message: "Chỉ được import @/server/supabase/admin tại users.ts, keepalive route và export route.",
             },
             {
-              group: [
-                "@/server/*",
-                "!@/server/actions/*",
-                "!@/server/actions/**",
-                "@/server/!(actions)/**",
-              ],
+              group: ["@/server/!(actions)/**"],
               message: "Components và hooks không được import từ server ngoại trừ actions.",
             },
           ],

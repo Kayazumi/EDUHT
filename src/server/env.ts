@@ -10,24 +10,7 @@ const serverEnvSchema = z.object({
   EXPORT_PSEUDONYM_KEY_VERSION: z.coerce.number().int().min(1).default(1),
 });
 
-function getServerEnv() {
-  const result = serverEnvSchema.safeParse({
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    STUDENT_EMAIL_DOMAIN: process.env.STUDENT_EMAIL_DOMAIN || "hs.pbl.example",
-    CRON_SECRET: process.env.CRON_SECRET,
-    EXPORT_PSEUDONYM_SECRET: process.env.EXPORT_PSEUDONYM_SECRET,
-    EXPORT_PSEUDONYM_KEY_VERSION: process.env.EXPORT_PSEUDONYM_KEY_VERSION || "1",
-  });
-
-  if (!result.success) {
-    const errors = result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-    throw new Error(`[Server Env Error] Cấu hình biến môi trường không hợp lệ: ${errors}`);
-  }
-
-  return result.data;
-}
-
-type ServerEnv = ReturnType<typeof getServerEnv>;
+type ServerEnv = z.infer<typeof serverEnvSchema>;
 const defaults: Partial<Record<keyof ServerEnv, string>> = {
   STUDENT_EMAIL_DOMAIN: "hs.pbl.example",
   EXPORT_PSEUDONYM_KEY_VERSION: "1",

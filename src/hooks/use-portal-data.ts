@@ -4,32 +4,33 @@ import { useCallback, useEffect, useState } from "react";
 import { loadPortalData, type PortalDataView } from "@/server/actions/portal-data";
 
 export function usePortalData<T>(view: PortalDataView, id?: string, childId?: string) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [result, setResult] = useState<{ key: string; data: T | null; error: string | null } | null>(null);
   const [version, setVersion] = useState(0);
+  const requestKey = JSON.stringify([view, id, childId, version]);
 
   const refresh = useCallback(() => setVersion((current) => current + 1), []);
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
     loadPortalData({ view, id, childId }).then((result) => {
       if (!active) return;
       if (result.ok) {
-        setData(result.data as T);
-        setError(null);
+        setResult({ key: requestKey, data: result.data as T, error: null });
       } else {
-        setError(result.error);
+        setResult({ key: requestKey, data: null, error: result.error });
       }
-      setIsLoading(false);
     }).catch((cause: unknown) => {
       if (!active) return;
-      setError(cause instanceof Error ? cause.message : "Không thể tải dữ liệu");
-      setIsLoading(false);
+      setResult({ key: requestKey, data: null, error: cause instanceof Error ? cause.message : "Không thể tải dữ liệu" });
     });
     return () => { active = false; };
-  }, [view, id, childId, version]);
+  }, [view, id, childId, requestKey]);
 
-  return { data, error, isLoading, refresh };
+  const hasResult = result?.key === requestKey;
+  return {
+    data: hasResult ? result.data : null,
+    error: hasResult ? result.error : null,
+    isLoading: !hasResult,
+    refresh,
+  };
 }
