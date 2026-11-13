@@ -4,15 +4,18 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { usePortalData } from "@/hooks/use-portal-data";
+import { createProject } from "@/server/actions/projects";
 
 export default function TeacherNewProjectPage() {
   const router = useRouter();
 
-  const [className, setClassName] = useState("10A1");
+  const [classId, setClassId] = useState("");
+  const { data: portalData, isLoading } = usePortalData<{ classes: { id: string; name: string; grade: number; school_year: string }[] }>("teacherProjects");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState("2026-11-10");
-  const [endDate, setEndDate] = useState("2026-12-20");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [minGroupSize, setMinGroupSize] = useState<number>(4);
   const [maxGroupSize, setMaxGroupSize] = useState<number>(5);
   const [weightGroup, setWeightGroup] = useState<string>(""); // Không có giá trị mặc định (A3.3)
@@ -25,7 +28,8 @@ export default function TeacherNewProjectPage() {
     ? (1 - weightGroupNum).toFixed(2)
     : "--";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -49,9 +53,18 @@ export default function TeacherNewProjectPage() {
       return;
     }
 
-    // Chuyển sang trang quản lý dự án mới
-    const mockNewId = "proj-" + Date.now();
-    router.push(`/teacher/projects/${mockNewId}`);
+    if (!classId) {
+      setError("Vui lòng chọn lớp học.");
+      return;
+    }
+    setIsSaving(true);
+    const result = await createProject({ classId, name: title, description, startDate, endDate, minGroupSize, maxGroupSize, weightA: weightGroupNum, allowStudentCreateTasks: allowCustomTasks });
+    setIsSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    router.push(`/teacher/projects/${result.data.id}`);
   };
 
   return (
@@ -95,12 +108,12 @@ export default function TeacherNewProjectPage() {
               Lớp học áp dụng <span className="text-rose-500">*</span>
             </label>
             <select
-              value={className}
-              onChange={(e) => setClassName(e.target.value)}
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="10A1">Lớp 10A1 (Khối 10, Năm học 2026-2027)</option>
-              <option value="10A2">Lớp 10A2 (Khối 10, Năm học 2026-2027)</option>
+              <option value="">{isLoading ? "Đang tải lớp..." : "Chọn lớp học"}</option>
+              {(portalData?.classes ?? []).map((item) => <option key={item.id} value={item.id}>{item.name} (Khối {item.grade}, {item.school_year})</option>)}
             </select>
           </div>
 
@@ -257,9 +270,10 @@ export default function TeacherNewProjectPage() {
             </Link>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+              disabled={isSaving || isLoading || !portalData?.classes.length}
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm"
             >
-              Tạo bản nháp dự án →
+              {isSaving ? "Đang lưu..." : "Tạo bản nháp dự án →"}
             </button>
           </div>
         </form>

@@ -19,7 +19,18 @@ export async function requireRole(expectedRole: Role) {
   if (profile.role !== expectedRole) {
     redirect(routes.auth.forbidden);
   }
+  if (!profile.isActive) {
+    redirect(routes.auth.forbidden);
+  }
 
+  return profile;
+}
+
+export async function requireAuthenticatedRole(expectedRole: Role) {
+  const profile = await requireRole(expectedRole);
+  if (profile.id.startsWith("demo-")) {
+    throw new AppError("Chế độ xem thử không được phép thay đổi dữ liệu", "UNAUTHORIZED", 401);
+  }
   return profile;
 }
 

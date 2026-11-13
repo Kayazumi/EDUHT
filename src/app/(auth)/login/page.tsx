@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/server/actions/auth";
 
 export default function LoginPage() {
+  const demoModeEnabled = process.env.NODE_ENV !== "production";
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -102,7 +103,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Hướng dẫn tài khoản demo */}
+        {demoModeEnabled && <>
+        {/* Hướng dẫn tài khoản demo chỉ dùng trong môi trường phát triển */}
         <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
           <p className="font-semibold mb-1.5 flex items-center gap-1.5">
             <span>🔑</span> <span>Tài khoản mẫu dùng thử:</span>
@@ -181,6 +183,7 @@ export default function LoginPage() {
             </button>
           </div>
         </div>
+        </>}
       </div>
     </main>
   );

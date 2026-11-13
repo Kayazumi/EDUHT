@@ -4,6 +4,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { usePortalData } from "@/hooks/use-portal-data";
+import { deleteProject } from "@/server/actions/projects";
 
 interface ProjectItem {
   id: string;
@@ -19,57 +21,43 @@ interface ProjectItem {
 export default function TeacherProjectsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const { data, error, refresh } = usePortalData<{ projects: any[]; classes: any[]; groupProgress: any[] }>("teacherProjects");
 
-  const [projects, setProjects] = useState<ProjectItem[]>([
-    {
-      id: "proj-p01",
-      title: "Dự án Tin học 10: Xây dựng Trang web cá nhân",
-      className: "10A1",
-      status: "active",
-      startDate: "2026-10-01",
-      endDate: "2026-11-20",
-      progressPercent: 68,
-      groupsCount: 7,
-    },
-    {
-      id: "proj-p02",
-      title: "Dự án Tin học 10: Thiết kế ứng dụng Python giải quyết bài toán thực tế",
-      className: "10A2",
-      status: "active",
-      startDate: "2026-10-15",
-      endDate: "2026-12-05",
-      progressPercent: 42,
-      groupsCount: 7,
-    },
-    {
-      id: "proj-p03",
-      title: "Dự án Tin học 10: Khảo sát an toàn thông tin mạng",
-      className: "10A1",
-      status: "draft",
-      startDate: "2026-12-01",
-      endDate: "2026-12-30",
-      progressPercent: 0,
-      groupsCount: 0,
-    },
-    {
-      id: "proj-p00",
-      title: "Dự án Mẫu: Lập trình game đơn giản với Pygame",
-      className: "10A1",
-      status: "closed",
-      startDate: "2026-09-01",
-      endDate: "2026-09-30",
-      progressPercent: 100,
-      groupsCount: 6,
-    },
-  ]);
+  React.useEffect(() => {
+    if (!data) return;
+    const classById = new Map(data.classes.map((item) => [item.id, item]));
+    const progressByProject = new Map<string, any[]>();
+    for (const item of data.groupProgress) {
+      const list = progressByProject.get(item.project_id) ?? [];
+      list.push(item);
+      progressByProject.set(item.project_id, list);
+    }
+    setProjects(data.projects.map((project) => {
+      const groups = progressByProject.get(project.id) ?? [];
+      const classInfo = classById.get(project.class_id);
+      return {
+        id: project.id,
+        title: project.title,
+        className: classInfo?.name ?? "Lớp chưa rõ",
+        status: project.status,
+        startDate: project.starts_on,
+        endDate: project.due_on,
+        progressPercent: groups.length ? Math.round(groups.reduce((sum, g) => sum + Number(g.completion_rate ?? 0), 0) / groups.length * 100) : 0,
+        groupsCount: groups.length,
+      };
+    }));
+  }, [data]);
 
-  const handleDelete = (id: string, title: string, status: string) => {
+  const handleDelete = async (id: string, title: string, status: string) => {
     if (status !== "draft") {
       alert("CHỈ CÓ THỂ XÓA DỰ ÁN Ở TRẠNG THÁI BẢN NHÁP (DRAFT)!");
       return;
     }
     if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn dự án bản nháp: "${title}"?`)) {
-      setProjects(projects.filter((p) => p.id !== id));
+      const result = await deleteProject({ projectId: id });
+      if (!result.ok) alert(result.error);
+      else refresh();
     }
   };
 
@@ -107,8 +95,7 @@ export default function TeacherProjectsPage() {
           className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="all">Tất cả lớp học</option>
-          <option value="10A1">Lớp 10A1</option>
-          <option value="10A2">Lớp 10A2</option>
+          {[...new Set(projects.map((project) => project.className))].map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
 
         <select

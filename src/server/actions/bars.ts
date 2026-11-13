@@ -3,11 +3,12 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const barsLevelSchema = z.object({
   level: z.coerce.number().int().min(1).max(4),
-  description: z.string().trim().min(5, "Mô tả mức tối thiểu 5 ký tự"),
+  behaviorText: z.string().trim().min(5, "Mô tả mức tối thiểu 5 ký tự"),
   points: z.coerce.number().min(0).max(10),
 });
 
@@ -15,7 +16,7 @@ const createCriterionSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(3, "Tên tiêu chí tối thiểu 3 ký tự").max(120),
   description: z.string().trim().optional(),
-  weight: z.coerce.number().min(0.1).max(10).default(1.0),
+  weight: z.coerce.number().int().min(1).max(5).default(1),
   position: z.coerce.number().default(0),
   levels: z.array(barsLevelSchema).length(4, "Tiêu chí BARS bắt buộc phải có đúng 4 mức hành vi (INV-04)"),
 });
@@ -28,6 +29,7 @@ export async function createCriterion(input: unknown): Promise<ActionResult<{ id
     }
 
     const { projectId, title, description, weight, position, levels } = parsed.data;
+    if (projectId) await requireRole("teacher"); else await requireRole("admin");
 
     // Kiểm tra điểm tăng dần nghiêm ngặt (INV-04)
     for (let i = 0; i < levels.length - 1; i++) {
@@ -44,11 +46,13 @@ export async function createCriterion(input: unknown): Promise<ActionResult<{ id
     const { data: crit, error: critErr } = await supabase
       .from("bars_criteria")
       .insert({
+        is_template: !projectId,
         project_id: projectId || null,
+        template_name: projectId ? null : "BARS chuẩn",
         title,
         description: description || null,
         weight,
-        position,
+        position: Math.max(1, Math.trunc(position)),
       })
       .select("id")
       .single();
@@ -59,24 +63,28 @@ export async function createCriterion(input: unknown): Promise<ActionResult<{ id
 
     // 2. Thêm 4 mức levels và points
     for (const lvl of levels) {
-      const { data: levelRow, error: lvlErr } = await supabase
+      const { error: lvlErr } = await supabase
         .from("bars_levels")
         .insert({
           criterion_id: crit.id,
           level: lvl.level,
-          description: lvl.description,
-        })
-        .select("id")
-        .single();
+          behavior_text: lvl.behaviorText,
+        });
 
-      if (lvlErr || !levelRow) {
+      if (lvlErr) {
+        await supabase.from("bars_criteria").delete().eq("id", crit.id);
         return { ok: false, error: "Lỗi tạo mức hành vi: " + (lvlErr?.message || "") };
       }
 
-      await supabase.from("bars_level_points").insert({
-        level_id: levelRow.id,
+      const { error: pointsError } = await supabase.from("bars_level_points").insert({
+        criterion_id: crit.id,
+        level: lvl.level,
         points: lvl.points,
       });
+      if (pointsError) {
+        await supabase.from("bars_criteria").delete().eq("id", crit.id);
+        return { ok: false, error: "Lỗi lưu điểm quy đổi: " + pointsError.message };
+      }
     }
 
     return { ok: true, data: { id: crit.id } };
@@ -90,11 +98,12 @@ const updateCriterionSchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(3).max(120),
   description: z.string().trim().optional(),
-  weight: z.coerce.number().min(0.1).max(10),
+  weight: z.coerce.number().int().min(1).max(5),
 });
 
 export async function updateCriterion(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = updateCriterionSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu cập nhật không hợp lệ" };
@@ -129,6 +138,7 @@ const deleteCriterionSchema = z.object({
 
 export async function deleteCriterion(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = deleteCriterionSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã tiêu chí không hợp lệ" };
@@ -162,6 +172,7 @@ const reorderCriteriaSchema = z.object({
 
 export async function reorderCriteria(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = reorderCriteriaSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu sắp xếp không hợp lệ" };
@@ -169,10 +180,11 @@ export async function reorderCriteria(input: unknown): Promise<ActionResult> {
 
     const supabase = await createClient();
     for (const item of parsed.data.items) {
-      await supabase
+      const { error } = await supabase
         .from("bars_criteria")
         .update({ position: item.position })
         .eq("id", item.id);
+      if (error) return { ok: false, error: error.message };
     }
 
     return { ok: true, data: undefined };

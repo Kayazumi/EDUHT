@@ -3,11 +3,12 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const reviewAnswerSchema = z.object({
   criterionId: z.string().uuid("Mã tiêu chí không hợp lệ"),
-  levelId: z.string().uuid("Mã mức hành vi không hợp lệ"),
+  level: z.coerce.number().int().min(1).max(4),
 });
 
 const reviewInputSchema = z.object({
@@ -19,6 +20,7 @@ const reviewInputSchema = z.object({
 
 export async function saveDraftReview(input: unknown): Promise<ActionResult<{ reviewId: string }>> {
   try {
+    await requireRole("student");
     const parsed = reviewInputSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu đánh giá không hợp lệ" };
@@ -56,21 +58,23 @@ export async function saveDraftReview(input: unknown): Promise<ActionResult<{ re
     }
 
     // 2. Cập nhật nhận xét
-    await supabase
+    const { error: commentError } = await supabase
       .from("peer_reviews")
       .update({ comment: comment || null })
       .eq("id", review.id);
+    if (commentError) return { ok: false, error: commentError.message };
 
     // 3. Upsert câu trả lời vào peer_review_answers
     for (const ans of answers) {
-      await supabase.from("peer_review_answers").upsert(
+      const { error: answerError } = await supabase.from("peer_review_answers").upsert(
         {
           review_id: review.id,
           criterion_id: ans.criterionId,
-          level_id: ans.levelId,
+          level: ans.level,
         },
         { onConflict: "review_id,criterion_id" }
       );
+      if (answerError) return { ok: false, error: answerError.message };
     }
 
     return { ok: true, data: { reviewId: review.id } };

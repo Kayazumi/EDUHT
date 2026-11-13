@@ -83,7 +83,7 @@ grant update (comment) on public.peer_reviews to authenticated;
 
 -- projects: không cho phép đổi status trực tiếp (đổi qua RPC set_project_status)
 revoke update on public.projects from authenticated;
-grant update (title, description, class_id, weight_group, min_group_size, max_group_size, allow_custom_tasks, due_date) on public.projects to authenticated;
+grant update (title, description, class_id, weight_group, group_size_min, group_size_max, allow_custom_tasks, due_on) on public.projects to authenticated;
 
 -- evaluation_rounds: không cho phép đổi status và finalized_at trực tiếp
 revoke update on public.evaluation_rounds from authenticated;
@@ -635,8 +635,15 @@ drop policy if exists "peer_scores_select" on public.peer_scores;
 create policy "peer_scores_select" on public.peer_scores
   for select to authenticated
   using (
-    public.is_teacher_of_project(project_id) or
-    (student_id = auth.uid() and public.results_published(project_id, student_id))
+    exists (
+      select 1
+      from public.evaluation_rounds er
+      where er.id = peer_scores.round_id
+        and (
+          public.is_teacher_of_project(er.project_id) or
+          (peer_scores.student_id = auth.uid() and public.results_published(er.project_id, peer_scores.student_id))
+        )
+    )
   );
 
 -- ----------------------------------------------------------------------------

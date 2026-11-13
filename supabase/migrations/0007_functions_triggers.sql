@@ -267,16 +267,17 @@ begin
 
   if tg_op = 'INSERT' then
     insert into public.task_events (
-      task_id, actor_id, event_type,
+      task_id, group_id, actor_id, event_type,
       from_status, to_status,
       from_assignee_id, to_assignee_id,
       from_due_at, to_due_at,
-      detail, occurred_at
+      assignee_id, due_at, detail, occurred_at
     ) values (
-      new.id, v_actor_id, 'created'::public.task_event_type,
+      new.id, new.group_id, v_actor_id, 'created'::public.task_event_type,
       null, new.status,
       null, new.assignee_id,
       null, new.due_at,
+      new.assignee_id, new.due_at,
       jsonb_build_object('title', new.title),
       now()
     );
@@ -284,16 +285,17 @@ begin
     -- Ghi nhận chuyển trạng thái
     if old.status is distinct from new.status then
       insert into public.task_events (
-        task_id, actor_id, event_type,
+        task_id, group_id, actor_id, event_type,
         from_status, to_status,
         from_assignee_id, to_assignee_id,
         from_due_at, to_due_at,
-        detail, occurred_at
+        assignee_id, due_at, detail, occurred_at
       ) values (
-        new.id, v_actor_id, 'status_changed'::public.task_event_type,
+        new.id, new.group_id, v_actor_id, 'status_changed'::public.task_event_type,
         old.status, new.status,
         old.assignee_id, new.assignee_id,
         old.due_at, new.due_at,
+        new.assignee_id, new.due_at,
         '{}'::jsonb,
         now()
       );
@@ -302,16 +304,17 @@ begin
     -- Ghi nhận đổi người phụ trách
     if old.assignee_id is distinct from new.assignee_id then
       insert into public.task_events (
-        task_id, actor_id, event_type,
+        task_id, group_id, actor_id, event_type,
         from_status, to_status,
         from_assignee_id, to_assignee_id,
         from_due_at, to_due_at,
-        detail, occurred_at
+        assignee_id, due_at, detail, occurred_at
       ) values (
-        new.id, v_actor_id, 'reassigned'::public.task_event_type,
+        new.id, new.group_id, v_actor_id, 'reassigned'::public.task_event_type,
         old.status, new.status,
         old.assignee_id, new.assignee_id,
         old.due_at, new.due_at,
+        new.assignee_id, new.due_at,
         '{}'::jsonb,
         now()
       );
@@ -320,16 +323,17 @@ begin
     -- Ghi nhận dời hạn chót
     if old.due_at is distinct from new.due_at then
       insert into public.task_events (
-        task_id, actor_id, event_type,
+        task_id, group_id, actor_id, event_type,
         from_status, to_status,
         from_assignee_id, to_assignee_id,
         from_due_at, to_due_at,
-        detail, occurred_at
+        assignee_id, due_at, detail, occurred_at
       ) values (
-        new.id, v_actor_id, 'due_date_changed'::public.task_event_type,
+        new.id, new.group_id, v_actor_id, 'due_date_changed'::public.task_event_type,
         old.status, new.status,
         old.assignee_id, new.assignee_id,
         old.due_at, new.due_at,
+        new.assignee_id, new.due_at,
         '{}'::jsonb,
         now()
       );
@@ -338,16 +342,17 @@ begin
     -- Ghi nhận lưu trữ thẻ
     if old.archived_at is null and new.archived_at is not null then
       insert into public.task_events (
-        task_id, actor_id, event_type,
+        task_id, group_id, actor_id, event_type,
         from_status, to_status,
         from_assignee_id, to_assignee_id,
         from_due_at, to_due_at,
-        detail, occurred_at
+        assignee_id, due_at, detail, occurred_at
       ) values (
-        new.id, v_actor_id, 'archived'::public.task_event_type,
+        new.id, new.group_id, v_actor_id, 'archived'::public.task_event_type,
         old.status, new.status,
         old.assignee_id, new.assignee_id,
         old.due_at, new.due_at,
+        new.assignee_id, new.due_at,
         '{}'::jsonb,
         now()
       );
@@ -356,16 +361,17 @@ begin
     -- Ghi nhận đổi tiêu đề hoặc mô tả
     if old.title is distinct from new.title or old.description is distinct from new.description then
       insert into public.task_events (
-        task_id, actor_id, event_type,
+        task_id, group_id, actor_id, event_type,
         from_status, to_status,
         from_assignee_id, to_assignee_id,
         from_due_at, to_due_at,
-        detail, occurred_at
+        assignee_id, due_at, detail, occurred_at
       ) values (
-        new.id, v_actor_id, 'title_or_desc_changed'::public.task_event_type,
+        new.id, new.group_id, v_actor_id, 'title_or_desc_changed'::public.task_event_type,
         old.status, new.status,
         old.assignee_id, new.assignee_id,
         old.due_at, new.due_at,
+        new.assignee_id, new.due_at,
         jsonb_build_object('title', new.title),
         now()
       );

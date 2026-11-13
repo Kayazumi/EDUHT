@@ -7,8 +7,8 @@ import { z } from "zod";
 
 const recordConsentSchema = z.object({
   studentId: z.string().uuid("Mã học sinh không hợp lệ"),
-  status: z.enum(["granted", "denied", "revoked"]).default("granted"),
-  consentedBy: z.enum(["student", "parent", "both"]).default("student"),
+  status: z.enum(["granted", "declined", "revoked"]).default("granted"),
+  consentedBy: z.enum(["student", "guardian", "both"]).default("student"),
   formVersion: z.string().min(1).default("v1.0"),
   note: z.string().trim().optional(),
 });

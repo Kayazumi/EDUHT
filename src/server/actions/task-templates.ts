@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createTemplateSchema = z.object({
@@ -16,6 +17,7 @@ const createTemplateSchema = z.object({
 
 export async function createTemplate(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
+    await requireRole("teacher");
     const parsed = createTemplateSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu nhiệm vụ mẫu không hợp lệ" };
@@ -30,7 +32,9 @@ export async function createTemplate(input: unknown): Promise<ActionResult<{ id:
         project_id: projectId,
         title,
         description: description || null,
-        suggested_duration_days: suggestedDurationDays || null,
+        default_due_on: suggestedDurationDays
+          ? new Date(Date.now() + suggestedDurationDays * 86_400_000).toISOString().slice(0, 10)
+          : null,
         position,
       })
       .select("id")
@@ -42,11 +46,23 @@ export async function createTemplate(input: unknown): Promise<ActionResult<{ id:
 
     // Gắn các mã YCCĐ nếu có
     if (requirementCodes.length > 0) {
-      const rows = requirementCodes.map((code) => ({
+      const { data: requirements, error: requirementError } = await supabase
+        .from("learning_requirements")
+        .select("id,code")
+        .in("code", requirementCodes);
+      if (requirementError || (requirements?.length ?? 0) !== requirementCodes.length) {
+        await supabase.from("task_templates").delete().eq("id", template.id);
+        return { ok: false, error: requirementError?.message || "Một hoặc nhiều mã YCCĐ không tồn tại" };
+      }
+      const rows = (requirements ?? []).map((requirement) => ({
         template_id: template.id,
-        requirement_code: code,
+        requirement_id: requirement.id,
       }));
-      await supabase.from("task_template_requirements").insert(rows);
+      const { error: attachError } = await supabase.from("task_template_requirements").insert(rows);
+      if (attachError) {
+        await supabase.from("task_templates").delete().eq("id", template.id);
+        return { ok: false, error: attachError.message };
+      }
     }
 
     return { ok: true, data: { id: template.id } };
@@ -65,6 +81,7 @@ const updateTemplateSchema = z.object({
 
 export async function updateTemplate(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = updateTemplateSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu cập nhật không hợp lệ" };
@@ -78,7 +95,9 @@ export async function updateTemplate(input: unknown): Promise<ActionResult> {
       .update({
         title,
         description: description || null,
-        suggested_duration_days: suggestedDurationDays || null,
+        default_due_on: suggestedDurationDays
+          ? new Date(Date.now() + suggestedDurationDays * 86_400_000).toISOString().slice(0, 10)
+          : null,
       })
       .eq("id", id);
 
@@ -99,6 +118,7 @@ const templateIdSchema = z.object({
 
 export async function deleteTemplate(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = templateIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã nhiệm vụ mẫu không hợp lệ" };
@@ -128,6 +148,7 @@ const attachStandardSchema = z.object({
 
 export async function attachStandard(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = attachStandardSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu gắn YCCĐ không hợp lệ" };
@@ -136,11 +157,17 @@ export async function attachStandard(input: unknown): Promise<ActionResult> {
     const { templateId, requirementCode } = parsed.data;
     const supabase = await createClient();
 
+    const { data: requirement, error: requirementError } = await supabase
+      .from("learning_requirements")
+      .select("id")
+      .eq("code", requirementCode)
+      .maybeSingle();
+    if (requirementError || !requirement) return { ok: false, error: "Không tìm thấy mã YCCĐ" };
     const { error } = await supabase
       .from("task_template_requirements")
       .insert({
         template_id: templateId,
-        requirement_code: requirementCode,
+        requirement_id: requirement.id,
       });
 
     if (error) {
@@ -156,6 +183,7 @@ export async function attachStandard(input: unknown): Promise<ActionResult> {
 
 export async function detachStandard(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = attachStandardSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu gỡ YCCĐ không hợp lệ" };
@@ -164,11 +192,17 @@ export async function detachStandard(input: unknown): Promise<ActionResult> {
     const { templateId, requirementCode } = parsed.data;
     const supabase = await createClient();
 
+    const { data: requirement, error: requirementError } = await supabase
+      .from("learning_requirements")
+      .select("id")
+      .eq("code", requirementCode)
+      .maybeSingle();
+    if (requirementError || !requirement) return { ok: false, error: "Không tìm thấy mã YCCĐ" };
     const { error } = await supabase
       .from("task_template_requirements")
       .delete()
       .eq("template_id", templateId)
-      .eq("requirement_code", requirementCode);
+      .eq("requirement_id", requirement.id);
 
     if (error) {
       return { ok: false, error: error.message };

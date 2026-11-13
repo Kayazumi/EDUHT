@@ -94,8 +94,13 @@ create table if not exists public.task_events (
   event_type task_event_type not null,
   from_status task_status null,
   to_status task_status null,
+  from_assignee_id uuid null,
+  to_assignee_id uuid null,
+  from_due_at timestamptz null,
+  to_due_at timestamptz null,
   assignee_id uuid null,
   due_at timestamptz null,
+  detail jsonb not null default '{}'::jsonb,
   occurred_at timestamptz not null default now(),
   constraint chk_task_events_status check (
     event_type <> 'status_changed'

@@ -211,7 +211,7 @@ begin
           v_template.description,
           'todo'::public.task_status,
           case when v_template.default_due_on is not null
-               then (now() + (v_template.default_due_on || ' days')::interval)
+               then (v_template.default_due_on::timestamptz + interval '1 day' - interval '1 millisecond')
                else null end,
           auth.uid()
         );
@@ -221,6 +221,78 @@ begin
   end loop;
 
   return v_inserted_count;
+end;
+$$;
+
+-- 2.3a RPC: assign_project_member(project_id, group_id, student_id)
+create or replace function public.assign_project_member(
+  p_project_id uuid,
+  p_group_id uuid,
+  p_student_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_teacher_of_project(p_project_id) then
+    raise exception 'Access denied: teacher only';
+  end if;
+  if not exists (
+    select 1 from public.groups g
+    join public.projects p on p.id = g.project_id
+    where g.id = p_group_id and g.project_id = p_project_id
+      and g.locked_at is null and p.status = 'draft'
+  ) then
+    raise exception 'Group is not available for assignment';
+  end if;
+
+  insert into public.group_members (group_id, project_id, student_id)
+  values (p_group_id, p_project_id, p_student_id)
+  on conflict (project_id, student_id)
+  do update set group_id = excluded.group_id;
+end;
+$$;
+
+-- 2.3b RPC: lock_project_groups(project_id)
+create or replace function public.lock_project_groups(p_project_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_project public.projects%rowtype;
+  v_group_count integer;
+  v_created_count integer;
+begin
+  if not public.is_teacher_of_project(p_project_id) then
+    raise exception 'Access denied: teacher only';
+  end if;
+  select * into v_project from public.projects where id = p_project_id for update;
+  if not found or v_project.status <> 'draft' then
+    raise exception 'Only draft projects can lock groups';
+  end if;
+
+  select count(*) into v_group_count from public.groups where project_id = p_project_id;
+  if v_group_count = 0 then raise exception 'Create at least one group before locking'; end if;
+  if exists (
+    select 1 from public.class_students cs
+    where cs.class_id = v_project.class_id
+      and not exists (select 1 from public.group_members gm where gm.project_id = p_project_id and gm.student_id = cs.student_id)
+  ) then raise exception 'Every student must be assigned to a group'; end if;
+  if exists (
+    select 1 from public.groups g
+    left join public.group_members gm on gm.group_id = g.id
+    where g.project_id = p_project_id
+    group by g.id
+    having count(gm.student_id) < v_project.group_size_min or count(gm.student_id) > v_project.group_size_max
+  ) then raise exception 'Every group must meet the configured size limits'; end if;
+
+  update public.groups set locked_at = now() where project_id = p_project_id and locked_at is null;
+  select public.instantiate_group_tasks(p_project_id) into v_created_count;
+  return coalesce(v_created_count, 0);
 end;
 $$;
 
@@ -275,8 +347,8 @@ begin
       select 1 from public.groups g
       where g.project_id = p_project_id
         and (
-          (select count(*) from public.group_members gm where gm.group_id = g.id) < v_project.min_group_size or
-          (select count(*) from public.group_members gm where gm.group_id = g.id) > v_project.max_group_size
+          (select count(*) from public.group_members gm where gm.group_id = g.id) < v_project.group_size_min or
+          (select count(*) from public.group_members gm where gm.group_id = g.id) > v_project.group_size_max
         )
     ) into v_group_mismatch;
     if v_group_mismatch then
@@ -480,7 +552,7 @@ begin
       from public.peer_reviews pr
       join public.peer_review_answers pra on pr.id = pra.review_id
       join public.bars_criteria bc on pra.criterion_id = bc.id
-      join public.bars_level_points blp on pra.criterion_id = blp.criterion_id and pra.level_id = blp.level_id
+      join public.bars_level_points blp on pra.criterion_id = blp.criterion_id and pra.level = blp.level
       where pr.round_id = p_round_id
         and pr.ratee_id = v_student.student_id
         and pr.submitted_at is not null
@@ -493,19 +565,17 @@ begin
     from review_scores;
 
     insert into public.peer_scores (
-      round_id, student_id, project_id, group_id,
+      round_id, student_id, group_id,
       score, reviews_received, reviews_expected,
-      peer_missing, computed_at
+      computed_at
     ) values (
-      p_round_id, v_student.student_id, v_round.project_id, v_student.group_id,
+      p_round_id, v_student.student_id, v_student.group_id,
       v_avg_score, v_reviews_received, v_reviews_expected,
-      (v_reviews_received = 0),
       now()
     ) on conflict (round_id, student_id) do update set
       score = excluded.score,
       reviews_received = excluded.reviews_received,
       reviews_expected = excluded.reviews_expected,
-      peer_missing = excluded.peer_missing,
       computed_at = excluded.computed_at;
   end loop;
 
@@ -567,7 +637,7 @@ begin
     from public.group_scores
     where group_id = v_student.group_id;
 
-    select score, peer_missing into v_peer_score, v_peer_missing
+    select score, (score is null) into v_peer_score, v_peer_missing
     from public.peer_scores
     where round_id = p_round_id and student_id = v_student.student_id;
 
@@ -862,7 +932,7 @@ begin
     from public.peer_reviews pr
     join public.peer_review_answers pra on pr.id = pra.review_id
     join public.bars_criteria bc on pra.criterion_id = bc.id
-    join public.bars_level_points blp on pra.criterion_id = blp.criterion_id and pra.level_id = blp.level_id
+      join public.bars_level_points blp on pra.criterion_id = blp.criterion_id and pra.level = blp.level
     where pr.round_id = v_score.round_id
       and pr.ratee_id = auth.uid()
       and pr.submitted_at is not null
@@ -960,6 +1030,10 @@ revoke execute on function public.export_research_dataset(uuid) from public, ano
 grant execute on function public.mark_password_changed() to authenticated;
 grant execute on function public.admin_db_size() to authenticated;
 grant execute on function public.instantiate_group_tasks(uuid) to authenticated;
+revoke execute on function public.assign_project_member(uuid, uuid, uuid) from public, anon;
+revoke execute on function public.lock_project_groups(uuid) from public, anon;
+grant execute on function public.assign_project_member(uuid, uuid, uuid) to authenticated;
+grant execute on function public.lock_project_groups(uuid) to authenticated;
 grant execute on function public.set_project_status(uuid, public.project_status) to authenticated;
 grant execute on function public.open_round(uuid) to authenticated;
 grant execute on function public.submit_review(uuid) to authenticated;

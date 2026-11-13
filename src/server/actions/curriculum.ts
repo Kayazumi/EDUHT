@@ -3,7 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
-import { requireRole } from "@/server/auth/guards";
+import { requireAuthenticatedRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createStandardSchema = z.object({
@@ -15,7 +15,7 @@ const createStandardSchema = z.object({
 
 export async function createStandard(input: unknown): Promise<ActionResult<{ code: string }>> {
   try {
-    await requireRole("admin");
+    await requireAuthenticatedRole("admin");
     const parsed = createStandardSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu YCCĐ không hợp lệ" };
@@ -29,7 +29,7 @@ export async function createStandard(input: unknown): Promise<ActionResult<{ cod
       .insert({
         code,
         grade,
-        strand,
+        strand: strand.toLowerCase() as "cs" | "ict" | "dl",
         content,
       });
 
@@ -51,7 +51,7 @@ const updateStandardSchema = z.object({
 
 export async function updateStandard(input: unknown): Promise<ActionResult> {
   try {
-    await requireRole("admin");
+    await requireAuthenticatedRole("admin");
     const parsed = updateStandardSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu cập nhật không hợp lệ" };
@@ -82,7 +82,7 @@ const deleteStandardSchema = z.object({
 
 export async function deleteStandard(input: unknown): Promise<ActionResult> {
   try {
-    await requireRole("admin");
+    await requireAuthenticatedRole("admin");
     const parsed = deleteStandardSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã YCCĐ không hợp lệ" };

@@ -1,9 +1,12 @@
 // [BE] Server Action quản lý tài khoản người dùng · tài liệu mục 4.6 và 7.7
 'use server';
 
+import { randomInt } from "node:crypto";
 import type { ActionResult } from "@/shared/utils/errors";
 import { createAdminClient } from "@/server/supabase/admin";
-import { requireRole } from "@/server/auth/guards";
+import { requireAuthenticatedRole } from "@/server/auth/guards";
+import { getProfile } from "@/server/auth/session";
+import { serverEnv } from "@/server/env";
 import {
   createTeacherSchema,
   createStudentSchema,
@@ -16,16 +19,30 @@ function generateTempPassword(prefix: "Hs" | "Gv"): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let randomStr = "";
   for (let i = 0; i < 6; i++) {
-    randomStr += chars.charAt(Math.floor(Math.random() * chars.length));
+    randomStr += chars.charAt(randomInt(chars.length));
   }
   return `${prefix}@${randomStr}!`;
+}
+
+function internalEmail(username: string): string {
+  return `${username}@${serverEnv.STUDENT_EMAIL_DOMAIN}`;
+}
+
+async function syncUserRole(userId: string, role: Role, admin: ReturnType<typeof createAdminClient>) {
+  const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+    app_metadata: { role, must_change_password: true },
+    user_metadata: { role, must_change_password: true },
+  });
+  if (authError) return authError.message;
+  const { error: profileError } = await admin.from("profiles").update({ role, must_change_password: true }).eq("id", userId);
+  return profileError?.message ?? null;
 }
 
 export async function createTeacher(
   input: unknown
 ): Promise<ActionResult<{ id: string; tempPassword?: string }>> {
   try {
-    await requireRole("admin");
+    await requireAuthenticatedRole("admin");
     const parsed = createTeacherSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu không hợp lệ" };
@@ -34,7 +51,7 @@ export async function createTeacher(
     const { username, full_name } = parsed.data;
     const admin = createAdminClient();
     const tempPassword = generateTempPassword("Gv");
-    const email = `${username}@pbl.internal`;
+    const email = internalEmail(username);
 
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -51,6 +68,11 @@ export async function createTeacher(
     if (authError || !authUser.user) {
       return { ok: false, error: authError?.message || "Không thể tạo tài khoản giáo viên" };
     }
+    const syncError = await syncUserRole(authUser.user.id, "teacher", admin);
+    if (syncError) {
+      await admin.auth.admin.deleteUser(authUser.user.id);
+      return { ok: false, error: `Không thể thiết lập vai trò giáo viên: ${syncError}` };
+    }
 
     return {
       ok: true,
@@ -66,6 +88,7 @@ export async function createStudent(
   input: unknown
 ): Promise<ActionResult<{ id: string; tempPassword?: string }>> {
   try {
+    await requireAuthenticatedRole("admin");
     const parsed = createStudentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu không hợp lệ" };
@@ -74,7 +97,7 @@ export async function createStudent(
     const { username, full_name, class_id } = parsed.data;
     const admin = createAdminClient();
     const tempPassword = generateTempPassword("Hs");
-    const email = `${username}@pbl.internal`;
+    const email = internalEmail(username);
 
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -92,6 +115,12 @@ export async function createStudent(
       return { ok: false, error: authError?.message || "Không thể tạo tài khoản học sinh" };
     }
 
+    const syncError = await syncUserRole(authUser.user.id, "student", admin);
+    if (syncError) {
+      await admin.auth.admin.deleteUser(authUser.user.id);
+      return { ok: false, error: `Không thể thiết lập hồ sơ học sinh: ${syncError}` };
+    }
+
     // Ghi danh học sinh vào lớp học
     const { error: enrollError } = await admin.from("class_students").insert({
       class_id,
@@ -99,6 +128,7 @@ export async function createStudent(
     });
 
     if (enrollError) {
+      await admin.auth.admin.deleteUser(authUser.user.id);
       return { ok: false, error: "Đã tạo tài khoản nhưng lỗi ghi danh vào lớp: " + enrollError.message };
     }
 
@@ -126,15 +156,24 @@ export async function importStudents(
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu danh sách không hợp lệ" };
     }
 
-    const { classId, students } = parsed.data;
+    const actor = await getProfile();
+    if (!actor || actor.id.startsWith("demo-") || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
+      return { ok: false, error: "Bạn không có quyền nhập học sinh" };
+    }
     const admin = createAdminClient();
+    if (actor.role === "teacher") {
+      const { data: ownedClass, error: classError } = await admin
+        .from("classes").select("id").eq("id", parsed.data.classId).eq("teacher_id", actor.id).is("archived_at", null).maybeSingle();
+      if (classError || !ownedClass) return { ok: false, error: "Bạn không được phân công phụ trách lớp này" };
+    }
+    const { classId, students } = parsed.data;
     const errors: string[] = [];
     let successCount = 0;
 
     for (const student of students) {
       try {
         const tempPassword = generateTempPassword("Hs");
-        const email = `${student.username}@pbl.internal`;
+        const email = internalEmail(student.username);
 
         const { data: authUser, error: authError } = await admin.auth.admin.createUser({
           email,
@@ -153,10 +192,22 @@ export async function importStudents(
           continue;
         }
 
-        await admin.from("class_students").insert({
+        const roleError = await syncUserRole(authUser.user.id, "student", admin);
+        if (roleError) {
+          await admin.auth.admin.deleteUser(authUser.user.id);
+          errors.push(`Học sinh @${student.username}: ${roleError}`);
+          continue;
+        }
+        const { error: enrollError } = await admin.from("class_students").insert({
           class_id: classId,
           student_id: authUser.user.id,
         });
+
+        if (enrollError) {
+          await admin.auth.admin.deleteUser(authUser.user.id);
+          errors.push(`Học sinh @${student.username}: ${enrollError.message}`);
+          continue;
+        }
 
         successCount++;
       } catch (e: unknown) {
@@ -182,6 +233,7 @@ export async function resetPassword(
   input: unknown
 ): Promise<ActionResult<{ tempPassword: string }>> {
   try {
+    await requireAuthenticatedRole("admin");
     const parsed = resetPasswordSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã người dùng không hợp lệ" };
@@ -189,9 +241,13 @@ export async function resetPassword(
 
     const admin = createAdminClient();
     const tempPassword = generateTempPassword("Hs");
+    const { data: targetProfile, error: profileReadError } = await admin
+      .from("profiles").select("role").eq("id", parsed.data.userId).maybeSingle();
+    if (profileReadError || !targetProfile) return { ok: false, error: "Không tìm thấy tài khoản" };
 
     const { error } = await admin.auth.admin.updateUserById(parsed.data.userId, {
       password: tempPassword,
+      app_metadata: { role: targetProfile.role, must_change_password: true },
       user_metadata: { must_change_password: true },
     });
 
@@ -200,10 +256,11 @@ export async function resetPassword(
     }
 
     // Cập nhật trạng thái must_change_password trên profiles
-    await admin
+    const { error: profileError } = await admin
       .from("profiles")
       .update({ must_change_password: true })
       .eq("id", parsed.data.userId);
+    if (profileError) return { ok: false, error: profileError.message };
 
     return { ok: true, data: { tempPassword } };
   } catch (err: unknown) {
@@ -219,7 +276,7 @@ const setActiveSchema = z.object({
 
 export async function setActive(input: unknown): Promise<ActionResult> {
   try {
-    await requireRole("admin");
+    await requireAuthenticatedRole("admin");
     const parsed = setActiveSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu trạng thái không hợp lệ" };
@@ -249,7 +306,7 @@ const setRoleSchema = z.object({
 
 export async function setRole(input: unknown): Promise<ActionResult> {
   try {
-    const currentAdmin = await requireRole("admin");
+    const currentAdmin = await requireAuthenticatedRole("admin");
     const parsed = setRoleSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu vai trò không hợp lệ" };
@@ -270,6 +327,7 @@ export async function setRole(input: unknown): Promise<ActionResult> {
     }
 
     await admin.auth.admin.updateUserById(parsed.data.userId, {
+      app_metadata: { role: parsed.data.role },
       user_metadata: { role: parsed.data.role },
     });
 

@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createGroupSchema = z.object({
@@ -12,6 +13,7 @@ const createGroupSchema = z.object({
 
 export async function createGroup(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
+    await requireRole("teacher");
     const parsed = createGroupSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu nhóm không hợp lệ" };
@@ -47,6 +49,7 @@ const renameGroupSchema = z.object({
 
 export async function renameGroup(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = renameGroupSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Tên nhóm không hợp lệ" };
@@ -75,7 +78,6 @@ const assignMemberSchema = z.object({
   groupId: z.string().uuid("Mã nhóm không hợp lệ"),
   studentId: z.string().uuid("Mã học sinh không hợp lệ"),
   projectId: z.string().uuid("Mã dự án không hợp lệ"),
-  role: z.enum(["leader", "member"]).default("member"),
 });
 
 export async function assignMember(input: unknown): Promise<ActionResult> {
@@ -85,25 +87,14 @@ export async function assignMember(input: unknown): Promise<ActionResult> {
       return { ok: false, error: "Dữ liệu phân nhóm không hợp lệ" };
     }
 
-    const { groupId, studentId, projectId, role } = parsed.data;
+    const { groupId, studentId, projectId } = parsed.data;
+    await requireRole("teacher");
     const supabase = await createClient();
-
-    // 1. Nếu học sinh đã ở nhóm khác trong cùng dự án, xóa nhóm cũ trước (INV-02)
-    await supabase
-      .from("group_members")
-      .delete()
-      .eq("project_id", projectId)
-      .eq("student_id", studentId);
-
-    // 2. Thêm vào nhóm mới
-    const { error } = await supabase
-      .from("group_members")
-      .insert({
-        group_id: groupId,
-        student_id: studentId,
-        project_id: projectId,
-        role,
-      });
+    const { error } = await supabase.rpc("assign_project_member", {
+      p_project_id: projectId,
+      p_group_id: groupId,
+      p_student_id: studentId,
+    });
 
     if (error) {
       return { ok: false, error: error.message };
@@ -123,6 +114,7 @@ const removeMemberSchema = z.object({
 
 export async function removeMember(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = removeMemberSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu không hợp lệ" };
@@ -154,6 +146,7 @@ const lockGroupsSchema = z.object({
 
 export async function lockGroups(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = lockGroupsSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã dự án không hợp lệ" };
@@ -162,25 +155,12 @@ export async function lockGroups(input: unknown): Promise<ActionResult> {
     const { projectId } = parsed.data;
     const supabase = await createClient();
 
-    // Khóa nhóm trên bảng groups và projects
-    const nowStr = new Date().toISOString();
-    await supabase
-      .from("groups")
-      .update({ locked_at: nowStr })
-      .eq("project_id", projectId);
-
-    await supabase
-      .from("projects")
-      .update({ groups_locked_at: nowStr })
-      .eq("id", projectId);
-
-    // Gọi RPC instantiate_group_tasks để sinh thẻ tự động cho các nhóm
-    const { error: rpcErr } = await supabase.rpc("instantiate_group_tasks", {
+    const { error: rpcErr } = await supabase.rpc("lock_project_groups", {
       p_project_id: projectId,
     });
 
     if (rpcErr) {
-      return { ok: false, error: "Lỗi sinh thẻ cho các nhóm: " + rpcErr.message };
+      return { ok: false, error: rpcErr.message };
     }
 
     return { ok: true, data: undefined };

@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createTaskSchema = z.object({
@@ -23,19 +24,22 @@ export async function createTask(input: unknown): Promise<ActionResult<{ id: str
     }
 
     const { groupId, projectId, title, description, assigneeId, dueDate, position } = parsed.data;
+    const profile = await requireRole("student");
     const supabase = await createClient();
+    const { data: group } = await supabase.from("groups").select("id").eq("id", groupId).eq("project_id", projectId).maybeSingle();
+    if (!group) return { ok: false, error: "Nhóm không thuộc dự án đã chọn hoặc bạn không có quyền truy cập" };
 
     const { data, error } = await supabase
       .from("tasks")
       .insert({
         group_id: groupId,
-        project_id: projectId,
         title,
         description: description || null,
         status: "todo",
         assignee_id: assigneeId || null,
-        due_date: dueDate || null,
+        due_at: dueDate ? `${dueDate}T23:59:59.999Z` : null,
         position,
+        created_by: profile.id,
       })
       .select("id")
       .single();
@@ -67,6 +71,7 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     }
 
     const { id, title, description, assigneeId, dueDate } = parsed.data;
+    await requireRole("student");
     const supabase = await createClient();
 
     const { error } = await supabase
@@ -75,7 +80,7 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
         title,
         description: description || null,
         assignee_id: assigneeId || null,
-        due_date: dueDate || null,
+        due_at: dueDate ? `${dueDate}T23:59:59.999Z` : null,
       })
       .eq("id", id);
 
@@ -105,6 +110,7 @@ export async function moveTask(input: unknown): Promise<ActionResult> {
     }
 
     const { taskId, status, assigneeId, position } = parsed.data;
+    await requireRole("student");
 
     // Ràng buộc Scenario 3: Chuyển sang doing bắt buộc có assignee
     if (status === "doing" && !assigneeId) {
@@ -112,6 +118,19 @@ export async function moveTask(input: unknown): Promise<ActionResult> {
     }
 
     const supabase = await createClient();
+    const { data: currentTask, error: currentError } = await supabase
+      .from("tasks")
+      .select("assignee_id,due_at")
+      .eq("id", taskId)
+      .maybeSingle();
+    if (currentError || !currentTask) return { ok: false, error: "Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập" };
+    const effectiveAssignee = assigneeId === undefined ? currentTask.assignee_id : assigneeId;
+    if (status !== "todo" && !currentTask.due_at) {
+      return { ok: false, error: "Cần đặt hạn hoàn thành trước khi chuyển nhiệm vụ sang Đang làm hoặc Hoàn thành" };
+    }
+    if (status !== "todo" && !effectiveAssignee) {
+      return { ok: false, error: "Nhiệm vụ đang làm hoặc đã hoàn thành phải có người phụ trách" };
+    }
     const updatePayload: Record<string, unknown> = { status };
     if (assigneeId !== undefined) {
       updatePayload.assignee_id = assigneeId;
@@ -149,6 +168,7 @@ export async function assignTask(input: unknown): Promise<ActionResult> {
     }
 
     const { taskId, assigneeId } = parsed.data;
+    await requireRole("student");
     const supabase = await createClient();
 
     const { error } = await supabase
@@ -180,11 +200,12 @@ export async function setDueDate(input: unknown): Promise<ActionResult> {
     }
 
     const { taskId, dueDate } = parsed.data;
+    await requireRole("student");
     const supabase = await createClient();
 
     const { error } = await supabase
       .from("tasks")
-      .update({ due_date: dueDate })
+      .update({ due_at: dueDate ? `${dueDate}T23:59:59.999Z` : null })
       .eq("id", taskId);
 
     if (error) {
@@ -204,6 +225,7 @@ const archiveTaskSchema = z.object({
 
 export async function archiveTask(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = archiveTaskSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã thẻ không hợp lệ" };

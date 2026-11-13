@@ -17,9 +17,12 @@ create type task_status as enum ('todo', 'doing', 'done');
 create type task_event_type as enum (
   'created',
   'assigned',
+  'reassigned',
   'status_changed',
   'due_changed',
+  'due_date_changed',
   'edited',
+  'title_or_desc_changed',
   'archived'
 );
 

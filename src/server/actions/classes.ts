@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 import { schoolYearSchema } from "@/shared/validation/user";
 
@@ -15,6 +16,7 @@ const createClassSchema = z.object({
 
 export async function createClass(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
+    await requireRole("admin");
     const parsed = createClassSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu lớp học không hợp lệ" };
@@ -52,6 +54,7 @@ const assignTeacherSchema = z.object({
 
 export async function assignTeacher(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = assignTeacherSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu phân công không hợp lệ" };
@@ -83,6 +86,7 @@ const enrollStudentsSchema = z.object({
 
 export async function enrollStudents(input: unknown): Promise<ActionResult<{ count: number }>> {
   try {
+    await requireRole("admin");
     const parsed = enrollStudentsSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu ghi danh không hợp lệ" };
@@ -118,6 +122,7 @@ const removeStudentSchema = z.object({
 
 export async function removeStudent(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = removeStudentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu không hợp lệ" };
@@ -149,6 +154,7 @@ const archiveClassSchema = z.object({
 
 export async function archiveClass(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("admin");
     const parsed = archiveClassSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã lớp không hợp lệ" };

@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createRoundSchema = z
@@ -25,16 +26,18 @@ export async function createRound(input: unknown): Promise<ActionResult<{ id: st
     }
 
     const { projectId, name, opensAt, closesAt } = parsed.data;
+    const profile = await requireRole("teacher");
     const supabase = await createClient();
 
     const { data, error } = await supabase
       .from("evaluation_rounds")
       .insert({
         project_id: projectId,
-        name,
+        title: name,
         opens_at: new Date(opensAt).toISOString(),
         closes_at: new Date(closesAt).toISOString(),
         status: "draft",
+        created_by: profile.id,
       })
       .select("id")
       .single();
@@ -56,6 +59,7 @@ const roundIdSchema = z.object({
 
 export async function openRound(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = roundIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã đợt đánh giá không hợp lệ" };
@@ -80,6 +84,7 @@ export async function openRound(input: unknown): Promise<ActionResult> {
 
 export async function finalizeRound(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = roundIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã đợt đánh giá không hợp lệ" };
@@ -109,6 +114,7 @@ const extendRoundSchema = z.object({
 
 export async function extendRound(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = extendRoundSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu gia hạn không hợp lệ" };

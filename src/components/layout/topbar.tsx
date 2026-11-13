@@ -2,6 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import type { Role } from "@/shared/config/roles";
+import { signOut } from "@/server/actions/auth";
 
 export interface TopbarProps {
   role?: Role;
@@ -27,19 +28,24 @@ export function Topbar({ role, userName = "Người dùng" }: TopbarProps) {
       </div>
       <div className="flex items-center gap-4">
         <span className="text-sm text-gray-700 font-medium hidden sm:inline">{userName}</span>
-        <Link
-          href="/login"
-          className="text-xs text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1"
-          title="Chuyển đổi nhanh vai trò"
-        >
-          <span>🔄</span> <span>Đổi vai trò</span>
-        </Link>
-        <Link
-          href="/login"
-          className="text-xs text-red-600 hover:text-red-700 font-medium"
-        >
-          Đăng xuất
-        </Link>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="text-xs text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1"
+            title="Đăng xuất để đăng nhập bằng tài khoản khác"
+          >
+            <span>🔄</span> <span>Đổi tài khoản</span>
+          </button>
+        </form>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="text-xs text-red-600 hover:text-red-700 font-medium"
+            title="Đăng xuất tài khoản hiện tại"
+          >
+            Đăng xuất
+          </button>
+        </form>
       </div>
     </header>
   );

@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const createProjectSchema = z
@@ -45,22 +46,22 @@ export async function createProject(input: unknown): Promise<ActionResult<{ id: 
       allowStudentCreateTasks,
     } = parsed.data;
 
-    const weightB = Number((1.0 - weightA).toFixed(2));
+    const profile = await requireRole("teacher");
     const supabase = await createClient();
 
     const { data, error } = await supabase
       .from("projects")
       .insert({
         class_id: classId,
-        name,
+        title: name,
         description: description || null,
-        start_date: startDate,
-        end_date: endDate,
-        min_group_size: minGroupSize,
-        max_group_size: maxGroupSize,
+        starts_on: startDate,
+        due_on: endDate,
+        group_size_min: minGroupSize,
+        group_size_max: maxGroupSize,
         weight_group: weightA,
-        weight_peer: weightB,
-        allow_student_create_tasks: allowStudentCreateTasks,
+        allow_custom_tasks: allowStudentCreateTasks,
+        created_by: profile.id,
         status: "draft",
       })
       .select("id")
@@ -93,15 +94,16 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
     }
 
     const { id, name, description, startDate, endDate } = parsed.data;
+    await requireRole("teacher");
     const supabase = await createClient();
 
     const { error } = await supabase
       .from("projects")
       .update({
-        name,
+        title: name,
         description: description || null,
-        start_date: startDate,
-        end_date: endDate,
+        starts_on: startDate,
+        due_on: endDate,
       })
       .eq("id", id)
       .eq("status", "draft");
@@ -123,6 +125,7 @@ const projectIdSchema = z.object({
 
 export async function activateProject(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = projectIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã dự án không hợp lệ" };
@@ -148,6 +151,7 @@ export async function activateProject(input: unknown): Promise<ActionResult> {
 
 export async function closeProject(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = projectIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã dự án không hợp lệ" };
@@ -172,6 +176,7 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
 
 export async function deleteProject(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = projectIdSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã dự án không hợp lệ" };

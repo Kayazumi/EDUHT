@@ -10,7 +10,7 @@ export const passwordSchema = z
   .min(8, "Mật khẩu phải có tối thiểu 8 ký tự");
 
 export const signInSchema = z.object({
-  username: usernameSchema,
+  username: z.string().regex(/^[A-Za-z0-9._-]{3,30}$/, "Tên đăng nhập gồm 3-30 ký tự chữ, số, chấm, gạch dưới hoặc gạch ngang").transform((value) => value.toLowerCase()),
   password: z.string().min(1, "Vui lòng nhập mật khẩu"),
 });
 

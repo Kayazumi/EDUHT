@@ -28,19 +28,26 @@ export const getSession = cache(async () => {
 export const getProfile = cache(async (): Promise<UserProfile | null> => {
   const session = await getSession();
   if (session?.user) {
-    const role = (session.user.app_metadata?.role as Role) || "student";
+    const supabase = await createClient();
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id,role,username,full_name,is_active,must_change_password")
+      .eq("id", session.user.id)
+      .maybeSingle();
+    if (error || !profile) return null;
     return {
-      id: session.user.id,
-      role,
-      username: session.user.user_metadata?.username || "",
-      fullName: session.user.user_metadata?.full_name || "",
-      isActive: true,
-      mustChangePassword: !!session.user.app_metadata?.must_change_password,
+      id: profile.id,
+      role: profile.role as Role,
+      username: profile.username,
+      fullName: profile.full_name,
+      isActive: profile.is_active,
+      mustChangePassword: profile.must_change_password,
     };
   }
 
-  // Chế độ xem trước demo cho phép kiểm tra giao diện khi chưa kết nối Supabase trực tiếp
+  // Chỉ cho phép xem trước demo trong môi trường phát triển.
   try {
+    if (process.env.NODE_ENV === "production") return null;
     const cookieStore = await cookies();
     const demoRole = cookieStore.get("pbl_demo_role")?.value as Role | undefined;
     if (demoRole && ["admin", "teacher", "student"].includes(demoRole)) {

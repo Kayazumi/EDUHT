@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { usePortalData } from "@/hooks/use-portal-data";
 
 interface AssignedTask {
   id: string;
@@ -38,63 +39,39 @@ interface ActiveProject {
 export default function StudentDashboardPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "doing" | "todo">("all");
 
-  const [activeProjects] = useState<ActiveProject[]>([
-    {
-      id: "p01",
-      name: "Dự án Tin học 12: Xây dựng Hệ thống Trợ lý AI và Chatbot",
-      teacherName: "ThS. Hoàng Thị Lan",
-      groupName: "Nhóm 01 - AI Chatbot",
-      totalTasks: 6,
-      doneTasks: 4,
-      completionRate: 0.67,
-      reviewRound: {
-        id: "round-1",
-        name: "Đợt 1: Đánh giá giai đoạn 1",
-        closesIn: "Còn 2 ngày 14:30",
-        submittedCount: 1,
-        totalPeers: 3,
-      },
-    },
-  ]);
+  const [activeProjects, setActiveProjects] = useState<ActiveProject[]>([]);
+  const [myTasks, setMyTasks] = useState<AssignedTask[]>([]);
+  const { data } = usePortalData<{ projects: any[]; tasks: any[]; groups: any[]; memberships: any[]; teachers: any[]; classes: any[]; rounds: any[] }>("studentDashboard");
 
-  const [myTasks] = useState<AssignedTask[]>([
-    {
-      id: "t1",
-      title: "Thiết kế kiến trúc hệ thống và luồng hội thoại Chatbot",
-      projectId: "p01",
-      projectName: "Hệ thống Trợ lý AI và Chatbot",
-      groupId: "g1",
-      groupName: "Nhóm 01",
-      status: "doing",
-      dueDate: "2026-11-03",
-      isOverdue: true, // Thẻ quá hạn: báo đỏ theo A3.4
-      curriculumTags: ["CS-01", "DL-02"],
-    },
-    {
-      id: "t2",
-      title: "Tích hợp API nhận dạng giọng nói và bộ tạo câu trả lời",
-      projectId: "p01",
-      projectName: "Hệ thống Trợ lý AI và Chatbot",
-      groupId: "g1",
-      groupName: "Nhóm 01",
-      status: "doing",
-      dueDate: "2026-11-06",
-      isOverdue: false,
-      curriculumTags: ["ICT-03"],
-    },
-    {
-      id: "t3",
-      title: "Viết kịch bản kiểm thử hộp đen và đối chiếu phản hồi",
-      projectId: "p01",
-      projectName: "Hệ thống Trợ lý AI và Chatbot",
-      groupId: "g1",
-      groupName: "Nhóm 01",
-      status: "todo",
-      dueDate: "2026-11-10",
-      isOverdue: false,
-      curriculumTags: ["CS-03"],
-    },
-  ]);
+  React.useEffect(() => {
+    if (!data) return;
+    const projects = new Map(data.projects.map((row) => [row.id, row]));
+    const groups = new Map(data.groups.map((row) => [row.id, row]));
+    const memberships = new Map(data.memberships.map((row) => [row.project_id, row]));
+    const classes = new Map(data.classes.map((row) => [row.id, row]));
+    const teachers = new Map(data.teachers.map((row) => [row.id, row]));
+    const projectCards = data.projects.map((project) => {
+      const membership = memberships.get(project.id);
+      const group = membership ? groups.get(membership.group_id) : undefined;
+      const projectTasks = data.tasks.filter((task) => task.group_id === group?.id);
+      const cls = classes.get(project.class_id);
+      const teacher = cls ? teachers.get(cls.teacher_id) : undefined;
+      const round = data.rounds.find((candidate) => candidate.project_id === project.id && candidate.status === "open");
+      return {
+        id: project.id, name: project.title, teacherName: teacher?.full_name ?? "",
+        groupName: group?.name ?? "Chưa xếp nhóm", totalTasks: projectTasks.length,
+        doneTasks: projectTasks.filter((task) => task.status === "done").length,
+        completionRate: projectTasks.length ? projectTasks.filter((task) => task.status === "done").length / projectTasks.length : 0,
+        ...(round ? { reviewRound: { id: round.id, name: round.title, closesIn: round.closes_at ? new Date(round.closes_at).toLocaleString("vi-VN") : "", submittedCount: 0, totalPeers: 0 } } : {}),
+      };
+    });
+    setActiveProjects(projectCards);
+    setMyTasks(data.tasks.filter((task) => task.assignee_id && ["todo", "doing"].includes(task.status)).map((task) => {
+      const group = groups.get(task.group_id);
+      const project = projects.get(group?.project_id);
+      return { id: task.id, title: task.title, projectId: project?.id ?? "", projectName: project?.title ?? "", groupId: group?.id ?? "", groupName: group?.name ?? "", status: task.status, dueDate: task.due_at ?? "", isOverdue: Boolean(task.due_at && new Date(task.due_at) < new Date()), curriculumTags: [] } as AssignedTask;
+    }));
+  }, [data]);
 
   const filteredTasks = myTasks.filter((t) => {
     if (filterStatus === "doing") return t.status === "doing";

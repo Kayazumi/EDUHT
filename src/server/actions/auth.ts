@@ -7,6 +7,7 @@ import { signInSchema, changePasswordSchema } from "@/shared/validation/auth";
 import type { ActionResult } from "@/shared/utils/errors";
 import { redirect } from "next/navigation";
 import { routes } from "@/shared/config/routes";
+import { serverEnv } from "@/server/env";
 
 export async function signIn(input: unknown): Promise<ActionResult<{ role: string; mustChangePassword: boolean }>> {
   try {
@@ -20,7 +21,6 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
 
     // 1. Hỗ trợ tài khoản Demo xem trước hệ thống
     const demoAccounts: Record<string, { role: string; validPass: string[] }> = {
-      admin: { role: "admin", validPass: ["admin123", "123456", "admin"] },
       "admin@pbl.internal": { role: "admin", validPass: ["admin123", "123456", "admin"] },
       "gv.lan": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
       "gv.lan@pbl.internal": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
@@ -30,7 +30,7 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
       student: { role: "student", validPass: ["123456", "student123"] },
     };
 
-    const demo = demoAccounts[cleanUsername];
+    const demo = process.env.NODE_ENV !== "production" ? demoAccounts[cleanUsername] : undefined;
     if (demo) {
       if (demo.validPass.includes(password)) {
         const cookieStore = await cookies();
@@ -45,7 +45,7 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
     }
 
     // 2. Kết nối Supabase Auth thật
-    const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@pbl.internal`;
+    const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@${serverEnv.STUDENT_EMAIL_DOMAIN}`;
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -57,8 +57,17 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
       return { ok: false, error: "Tên đăng nhập hoặc mật khẩu không chính xác" };
     }
 
-    const role = (data.user.app_metadata?.role as string) || "student";
-    const mustChangePassword = !!data.user.app_metadata?.must_change_password;
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role,must_change_password,is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    if (profileError || !profile || !profile.is_active) {
+      await supabase.auth.signOut();
+      return { ok: false, error: "Tài khoản chưa được kích hoạt hoặc chưa có hồ sơ trong hệ thống" };
+    }
+    const role = profile.role;
+    const mustChangePassword = profile.must_change_password;
 
     return {
       ok: true,
@@ -70,7 +79,7 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
   }
 }
 
-export async function signOut(): Promise<ActionResult> {
+export async function signOut(): Promise<void> {
   try {
     const supabase = await createClient();
     await supabase.auth.signOut();
@@ -103,8 +112,11 @@ export async function changePassword(input: unknown): Promise<ActionResult> {
       return { ok: false, error: updateError.message };
     }
 
-    // Đánh dấu must_change_password = false trên bảng profiles qua RPC
-    await supabase.rpc("mark_password_changed");
+    // Proxy đọc trạng thái đổi mật khẩu từ hồ sơ; báo lỗi nếu RPC không cập nhật được.
+    const { error: profileError } = await supabase.rpc("mark_password_changed");
+    if (profileError) {
+      return { ok: false, error: `Đã đổi mật khẩu nhưng chưa cập nhật được trạng thái hồ sơ: ${profileError.message}` };
+    }
 
     return { ok: true, data: undefined };
   } catch (err: unknown) {

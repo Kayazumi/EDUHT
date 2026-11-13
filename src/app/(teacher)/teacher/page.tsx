@@ -4,85 +4,45 @@
 import React from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { usePortalData } from "@/hooks/use-portal-data";
 
 export default function TeacherDashboardPage() {
-  const myClasses = [
-    {
-      id: "c-10a1",
-      name: "10A1",
-      grade: 10,
-      studentCount: 35,
-      projectCount: 2,
-      activeProjects: ["Dự án Tin học 10: Xây dựng Trang web cá nhân"],
-    },
-    {
-      id: "c-10a2",
-      name: "10A2",
-      grade: 10,
-      studentCount: 34,
-      projectCount: 1,
-      activeProjects: ["Dự án Tin học 10: Thiết kế ứng dụng Python"],
-    },
-  ];
-
-  const runningProjects = [
-    {
-      id: "proj-p01",
-      name: "Xây dựng Trang web cá nhân môn Tin học 10",
-      className: "10A1",
-      completionRate: 68,
-      overdueGroupsCount: 2,
-      totalGroups: 7,
-      evaluationRound: {
-        title: "Đợt 1: Đánh giá tiến độ giữa kỳ",
-        status: "open",
-        closesIn: "Còn 1 ngày 04 giờ",
-        submittedPercent: 75,
-      },
-    },
-    {
-      id: "proj-p02",
-      name: "Thiết kế ứng dụng Python giải quyết bài toán thực tế",
-      className: "10A2",
-      completionRate: 42,
-      overdueGroupsCount: 3,
-      totalGroups: 7,
-      evaluationRound: {
-        title: "Chưa mở đợt đánh giá",
-        status: "draft",
-        closesIn: "-",
-        submittedPercent: 0,
-      },
-    },
-  ];
-
-  // Danh mục việc cần làm tự sinh từ dữ liệu
-  const actionableTasks = [
-    {
-      id: "act-1",
-      type: "urgent",
-      title: "Chốt đợt đánh giá BARS: Đợt 1 Dự án 10A1",
-      desc: "Đợt đánh giá đã đạt 75% số phiếu nộp và sắp đến hạn đóng. Hãy kiểm tra các nhóm còn thiếu và chốt đợt.",
-      href: "/teacher/projects/proj-p01/evaluation",
-      badge: "Cần xử lý",
-    },
-    {
-      id: "act-2",
-      type: "warning",
-      title: "Khóa danh sách nhóm Dự án Python 10A2",
-      desc: "Tất cả 7 nhóm đã đủ sĩ số từ 4-5 học sinh. Hãy bấm Khóa nhóm để hệ thống tự động sinh thẻ việc Kanban.",
-      href: "/teacher/projects/proj-p02/groups",
-      badge: "Sẵn sàng khóa",
-    },
-    {
-      id: "act-3",
-      type: "info",
-      title: "Can thiệp sớm: Nhóm 03 (10A1) có tỷ lệ trễ hạn 40%",
-      desc: "Nhóm có 2 thẻ việc quá hạn trên 3 ngày mà chưa được cập nhật trạng thái.",
-      href: "/teacher/projects/proj-p01/dashboard",
-      badge: "Cảnh báo tiến độ",
-    },
-  ];
+  const { data, error } = usePortalData<{ classes: any[]; projects: any[]; memberships: any[]; groupProgress: any[]; rounds: any[] }>("teacherDashboard");
+  const classes = data?.classes ?? [];
+  const projects = data?.projects ?? [];
+  const myClasses = classes.map((cls) => ({
+    ...cls,
+    studentCount: data?.memberships.filter((member) => member.class_id === cls.id).length ?? 0,
+    projectCount: projects.filter((project) => project.class_id === cls.id).length,
+  }));
+  const runningProjects = projects.filter((project) => project.status !== "closed").map((project) => {
+    const cls = classes.find((item) => item.id === project.class_id);
+    const groups = data?.groupProgress.filter((item) => item.project_id === project.id) ?? [];
+    const round = data?.rounds.find((item) => item.project_id === project.id && item.status === "open");
+    return {
+      id: project.id,
+      name: project.title,
+      status: project.status,
+      className: cls?.name ?? "",
+      completionRate: groups.length ? Math.round(groups.reduce((sum, item) => sum + Number(item.completion_rate ?? 0), 0) / groups.length * 100) : 0,
+      overdueGroupsCount: groups.filter((item) => Number(item.overdue_rate ?? 0) > 0).length,
+      totalGroups: groups.length,
+      evaluationRound: round
+        ? { title: round.title, status: round.status, closesIn: new Date(round.closes_at).toLocaleString("vi-VN"), submittedPercent: 0 }
+        : { title: "Chưa mở đợt đánh giá", status: "draft", closesIn: "—", submittedPercent: 0 },
+    };
+  });
+  const actionableTasks = projects.filter((project) => project.status !== "closed").map((project) => {
+    const isDraft = project.status === "draft";
+    return {
+      id: project.id,
+      type: isDraft ? "warning" : "info",
+      title: isDraft ? `Hoàn thiện dự án: ${project.title}` : `Theo dõi tiến độ: ${project.title}`,
+      desc: isDraft ? "Dự án đang ở trạng thái bản nháp. Kiểm tra kho nhiệm vụ và phân nhóm trước khi kích hoạt." : "Xem tiến độ các nhóm và công việc cần hỗ trợ.",
+      href: isDraft ? `/teacher/projects/${project.id}/groups` : `/teacher/projects/${project.id}/dashboard`,
+      badge: isDraft ? "Bản nháp" : "Đang thực hiện",
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -105,6 +65,8 @@ export default function TeacherDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
       {/* Mục VIỆC CẦN LÀM (Actionable Items) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
@@ -192,7 +154,7 @@ export default function TeacherDashboardPage() {
                       {p.name}
                     </h3>
                   </div>
-                  <Badge variant="success">Active</Badge>
+                  <Badge variant={p.status === "active" ? "success" : "warning"}>{p.status === "active" ? "Active" : "Draft"}</Badge>
                 </div>
 
                 {/* Thanh tiến độ */}

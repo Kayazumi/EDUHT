@@ -3,6 +3,7 @@
 
 import type { ActionResult } from "@/shared/utils/errors";
 import { createClient } from "@/server/supabase/server";
+import { requireRole } from "@/server/auth/guards";
 import { z } from "zod";
 
 const setGroupScoreSchema = z.object({
@@ -18,20 +19,15 @@ export async function setGroupScore(input: unknown): Promise<ActionResult> {
       return { ok: false, error: parsed.error.errors[0]?.message || "Điểm nhóm không hợp lệ" };
     }
 
-    const { groupId, projectId, score } = parsed.data;
+    const { groupId, score } = parsed.data;
+    const profile = await requireRole("teacher");
     const supabase = await createClient();
-
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
-      return { ok: false, error: "Chưa đăng nhập" };
-    }
 
     const { error } = await supabase.from("group_scores").upsert(
       {
         group_id: groupId,
-        project_id: projectId,
         score,
-        graded_by: userData.user.id,
+        graded_by: profile.id,
         graded_at: new Date().toISOString(),
       },
       { onConflict: "group_id" }
@@ -55,6 +51,7 @@ const computeScoresSchema = z.object({
 
 export async function computeFinalScores(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = computeScoresSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu tính điểm không hợp lệ" };
@@ -89,6 +86,7 @@ const adjustScoreSchema = z.object({
 
 export async function adjustFinalScore(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = adjustScoreSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu điều chỉnh điểm không hợp lệ" };
@@ -122,6 +120,7 @@ const publishSchema = z.object({
 
 export async function publishResults(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = publishSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Mã dự án không hợp lệ" };
@@ -151,6 +150,7 @@ const unpublishSchema = z.object({
 
 export async function unpublishResults(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = unpublishSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu rút lại công bố không hợp lệ" };
