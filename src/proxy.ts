@@ -8,6 +8,8 @@ const PUBLIC_PATHS = [
   "/forgot-password",
   "/auth/callback",
   "/forbidden",
+  // The route handler validates the Vercel Cron bearer token itself.
+  "/api/cron/keepalive",
 ];
 
 export async function proxy(request: NextRequest) {
