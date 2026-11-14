@@ -27,11 +27,7 @@ export async function requireRole(expectedRole: Role) {
 }
 
 export async function requireAuthenticatedRole(expectedRole: Role) {
-  const profile = await requireRole(expectedRole);
-  if (profile.id.startsWith("demo-")) {
-    throw new AppError("Chế độ xem thử không được phép thay đổi dữ liệu", "UNAUTHORIZED", 401);
-  }
-  return profile;
+  return requireRole(expectedRole);
 }
 
 export async function requireClassTeacher(classId: string) {

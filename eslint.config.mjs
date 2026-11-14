@@ -25,11 +25,12 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // 1. Cấm import @/server/supabase/admin ở mọi nơi ngoại trừ 3 tệp cho phép
+  // 1. Chỉ các luồng server đặc quyền đã được rà soát được dùng service role.
   {
     files: ["**/*.{ts,tsx}"],
     ignores: [
       "src/server/actions/users.ts",
+      "src/server/actions/auth.ts",
       "src/app/api/cron/keepalive/route.ts",
       "src/app/api/export/**",
     ],
@@ -40,7 +41,7 @@ const eslintConfig = defineConfig([
           patterns: [
             {
               group: ["@/server/supabase/admin", "@/server/supabase/admin.ts"],
-              message: "Chỉ được import @/server/supabase/admin tại users.ts, keepalive route và export route.",
+              message: "Chỉ được import @/server/supabase/admin tại các server action xác thực/quản trị và API route được rà soát.",
             },
           ],
         },

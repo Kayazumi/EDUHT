@@ -4,27 +4,48 @@
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "storage", "graphql_public"]
+schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
+
+[db.pooler]
+default_pool_size = 15
+max_client_conn = 200
 
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://localhost:3000"]
+additional_redirect_urls = []
 jwt_expiry = 3600
-enable_signup = false
-enable_confirmations = false
+enable_signup = true
+enable_confirmations = true
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_positive_confirmation = false
-enable_confirmations = false
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email.template.confirmation]
+subject = "Xác minh tài khoản EDUHT"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Mã khôi phục mật khẩu EDUHT"
+content_path = "./supabase/templates/recovery.html"
 
 [auth.password]
 minimum_length = 8
+
+[storage.vector]
+enabled = false

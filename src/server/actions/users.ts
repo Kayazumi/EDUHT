@@ -157,7 +157,7 @@ export async function importStudents(
     }
 
     const actor = await getProfile();
-    if (!actor || actor.id.startsWith("demo-") || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
+    if (!actor || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
       return { ok: false, error: "Bạn không có quyền nhập học sinh" };
     }
     const admin = createAdminClient();
@@ -276,17 +276,22 @@ const setActiveSchema = z.object({
 
 export async function setActive(input: unknown): Promise<ActionResult> {
   try {
-    await requireAuthenticatedRole("admin");
+    const actor = await requireAuthenticatedRole("admin");
     const parsed = setActiveSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu trạng thái không hợp lệ" };
     }
 
+    if (parsed.data.userId === actor.id) {
+      return { ok: false, error: "Bạn không thể tự khóa hoặc mở khóa chính tài khoản của mình" };
+    }
+
     const admin = createAdminClient();
-    const { error } = await admin
-      .from("profiles")
-      .update({ is_active: parsed.data.isActive })
-      .eq("id", parsed.data.userId);
+    const { error } = await admin.rpc("admin_set_user_active", {
+      p_actor_id: actor.id,
+      p_target_id: parsed.data.userId,
+      p_is_active: parsed.data.isActive,
+    });
 
     if (error) {
       return { ok: false, error: error.message };
@@ -317,19 +322,12 @@ export async function setRole(input: unknown): Promise<ActionResult> {
     }
 
     const admin = createAdminClient();
-    const { error } = await admin
-      .from("profiles")
-      .update({ role: parsed.data.role })
-      .eq("id", parsed.data.userId);
-
-    if (error) {
-      return { ok: false, error: error.message };
-    }
-
-    await admin.auth.admin.updateUserById(parsed.data.userId, {
-      app_metadata: { role: parsed.data.role },
-      user_metadata: { role: parsed.data.role },
+    const { error } = await admin.rpc("admin_update_user_role", {
+      p_actor_id: currentAdmin.id,
+      p_target_id: parsed.data.userId,
+      p_new_role: parsed.data.role,
     });
+    if (error) return { ok: false, error: error.message };
 
     return { ok: true, data: undefined };
   } catch (err: unknown) {

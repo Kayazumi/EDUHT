@@ -1,10 +1,10 @@
 // [BE] Cổng kiểm tra phiên và vai trò (proxy/middleware) · tài liệu mục 7.12
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/server/supabase/proxy-session";
-import type { Role } from "@/shared/config/roles";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/register",
   "/forgot-password",
   "/auth/callback",
   "/forbidden",
@@ -19,12 +19,7 @@ export async function proxy(request: NextRequest) {
 
   // 1. Cập nhật phiên từ Supabase cookie
   const { response, user, profile } = await updateSession(request);
-  const demoRole = process.env.NODE_ENV !== "production"
-    ? (request.cookies.get("pbl_demo_role")?.value as Role | undefined)
-    : undefined;
-  const isDemoValid = demoRole && ["admin", "teacher", "student"].includes(demoRole);
-
-  if (!user && !isDemoValid) {
+  if (!user) {
     if (!isPublicPath) {
       const loginUrl = new URL("/login", request.url);
       if (pathname !== "/") {
@@ -35,9 +30,9 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // 2. Người dùng đã đăng nhập hoặc dùng demo preview role
-  const role = user ? ((profile?.role as Role) || (user.app_metadata?.role as Role) || "student") : (demoRole as Role);
-  const mustChangePassword = user ? (profile?.must_change_password ?? !!user.app_metadata?.must_change_password) : false;
+  // 2. Quyền lấy từ hồ sơ server-side; metadata không là nguồn phân quyền.
+  const role = (profile?.role as "admin" | "teacher" | "student") || (user.app_metadata?.role as "admin" | "teacher" | "student") || "student";
+  const mustChangePassword = profile?.must_change_password ?? !!user.app_metadata?.must_change_password;
 
   // 2.1 Bắt buộc đổi mật khẩu nếu must_change_password = true
   if (mustChangePassword && pathname !== "/change-password" && !isPublicPath) {
@@ -52,7 +47,7 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/") {
     return NextResponse.redirect(new URL(`/${role}`, request.url));
   }
-  if (pathname === "/login" && user) {
+  if ((pathname === "/login" || pathname === "/register") && user) {
     return NextResponse.redirect(new URL(`/${role}`, request.url));
   }
 

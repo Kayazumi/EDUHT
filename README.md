@@ -59,6 +59,7 @@ Mỗi thành viên tự tạo .env.local; không commit file này. Lấy URL và
 | EXPORT_PSEUDONYM_SECRET | Bí mật tối thiểu 32 ký tự để tạo mã giả khi xuất dữ liệu nghiên cứu. |
 | EXPORT_PSEUDONYM_KEY_VERSION | Phiên bản khóa, thường là 1. |
 | ADMIN_INITIAL_PASSWORD, TEACHER_INITIAL_PASSWORD, STUDENT_INITIAL_PASSWORD | Chỉ cần khi chạy script tạo tài khoản mẫu; không cần nếu tài khoản đã có. |
+| ADMIN_SHARED_INITIAL_PASSWORD | Chỉ dùng một lần khi provisioning admin1–admin3; phải bằng mật khẩu admin hiện có. Không chia sẻ/commit giá trị này. |
 
 Không tự ý đổi domain/mật khẩu hoặc chạy seed trên database dùng chung. Script seed có thể tạo hoặc cập nhật các tài khoản mẫu. Không chạy npm run db:reset trên database dùng chung vì lệnh này có thể xóa dữ liệu.
 
@@ -73,9 +74,15 @@ Mở [http://localhost:3000](http://localhost:3000). Dừng bằng Ctrl+C. Nếu
 
 ### 4. Đăng nhập
 
-Database mẫu của nhóm có Admin, giáo viên mã GV01 và học sinh SPT01–SPT30. Username đăng nhập tương ứng là admin, gv01, spt01–spt30. Nhận mật khẩu hiện hành từ trưởng nhóm; tài khoản có thể bắt buộc đổi mật khẩu lần đầu.
+Database của nhóm có Admin, admin1–admin3, giáo viên gv01 và học sinh spt01–spt30. Username đăng nhập không phân biệt chữ hoa/thường. Nhận mật khẩu từ trưởng nhóm; không ghi mật khẩu vào README hoặc GitHub.
 
-Các nút xem trước vai trò chỉ dùng trong môi trường development, không phải tài khoản Supabase và không dùng để xác minh quyền truy cập production.
+Tài khoản có email placeholder không nhận thư sẽ không thể dùng quên mật khẩu cho tới khi admin cập nhật email thật. Giáo viên tự đăng ký phải được admin kích hoạt sau khi xác minh email. Admin không có form tự đăng ký; admin khác phải nâng vai trò tài khoản hiện có.
+
+## Email đăng ký và khôi phục mật khẩu
+
+Ứng dụng gửi OTP qua Supabase Auth. Với Supabase hosted, cần cấu hình custom SMTP trong Authentication settings để gửi thư tới Gmail bên ngoài. Trong Email Templates, mẫu Confirm signup và Reset password phải hiển thị biến {{ .Token }} để người dùng nhập mã trong ứng dụng. Mẫu local nằm trong supabase/templates/; dashboard hosted cần được cấu hình riêng.
+
+Các email placeholder kết thúc bằng example.invalid là địa chỉ không nhận thư, không phải Gmail thật. Hãy thay chúng bằng địa chỉ của chủ tài khoản trước khi cần xác minh hoặc khôi phục mật khẩu.
 
 ## Chạy bằng Docker
 

@@ -4,6 +4,8 @@ export const routes = {
   home: "/",
   auth: {
     login: "/login",
+    register: "/register",
+    forgotPassword: "/forgot-password",
     changePassword: "/change-password",
     forbidden: "/forbidden",
   },

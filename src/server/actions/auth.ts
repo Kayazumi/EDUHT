@@ -2,12 +2,19 @@
 'use server';
 
 import { createClient } from "@/server/supabase/server";
-import { cookies } from "next/headers";
-import { signInSchema, changePasswordSchema } from "@/shared/validation/auth";
+import {
+  changePasswordSchema,
+  recoveryCompleteSchema,
+  recoveryRequestSchema,
+  signInSchema,
+  signupSchema,
+  signupVerificationSchema,
+} from "@/shared/validation/auth";
 import type { ActionResult } from "@/shared/utils/errors";
 import { redirect } from "next/navigation";
 import { routes } from "@/shared/config/routes";
-import { serverEnv } from "@/server/env";
+import { publicEnv } from "@/shared/config/public-env";
+import { createAdminClient } from "@/server/supabase/admin";
 
 export async function signIn(input: unknown): Promise<ActionResult<{ role: string; mustChangePassword: boolean }>> {
   try {
@@ -17,35 +24,20 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
     }
 
     const { username, password } = parsed.data;
-    const cleanUsername = username.trim().toLowerCase();
+    let email = username;
 
-    // 1. Hỗ trợ tài khoản Demo xem trước hệ thống
-    const demoAccounts: Record<string, { role: string; validPass: string[] }> = {
-      "admin@pbl.internal": { role: "admin", validPass: ["admin123", "123456", "admin"] },
-      "gv.lan": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
-      "gv.lan@pbl.internal": { role: "teacher", validPass: ["123456", "teacher123", "gvlan123"] },
-      teacher: { role: "teacher", validPass: ["123456", "teacher123"] },
-      "hs.an01": { role: "student", validPass: ["123456", "student123"] },
-      "hs.an01@pbl.internal": { role: "student", validPass: ["123456", "student123"] },
-      student: { role: "student", validPass: ["123456", "student123"] },
-    };
-
-    const demo = process.env.NODE_ENV !== "production" ? demoAccounts[cleanUsername] : undefined;
-    if (demo) {
-      if (demo.validPass.includes(password)) {
-        const cookieStore = await cookies();
-        cookieStore.set("pbl_demo_role", demo.role, { path: "/", maxAge: 86400 });
-        return {
-          ok: true,
-          data: { role: demo.role, mustChangePassword: false },
-        };
-      } else {
-        return { ok: false, error: "Mật khẩu không chính xác cho tài khoản demo (thử: 123456 hoặc admin123)" };
+    // Existing accounts use usernames while new registrations use real emails.
+    // Resolve usernames on the server so auth.users emails never reach the client.
+    if (!username.includes("@")) {
+      const admin = createAdminClient();
+      const { data: profile } = await admin.from("profiles").select("id").eq("username", username).maybeSingle();
+      if (!profile) return { ok: false, error: "Tên đăng nhập/email hoặc mật khẩu không chính xác" };
+      const { data: authUser, error: authUserError } = await admin.auth.admin.getUserById(profile.id);
+      if (authUserError || !authUser.user?.email) {
+        return { ok: false, error: "Tên đăng nhập/email hoặc mật khẩu không chính xác" };
       }
+      email = authUser.user.email.toLowerCase();
     }
-
-    // 2. Kết nối Supabase Auth thật
-    const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@${serverEnv.STUDENT_EMAIL_DOMAIN}`;
 
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -54,7 +46,7 @@ export async function signIn(input: unknown): Promise<ActionResult<{ role: strin
     });
 
     if (error) {
-      return { ok: false, error: "Tên đăng nhập hoặc mật khẩu không chính xác" };
+      return { ok: false, error: "Tên đăng nhập/email hoặc mật khẩu không chính xác" };
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -86,13 +78,104 @@ export async function signOut(): Promise<void> {
   } catch {
     // Không cản trở redirect
   }
-  try {
-    const cookieStore = await cookies();
-    cookieStore.delete("pbl_demo_role");
-  } catch {
-    // Không làm gián đoạn redirect
-  }
   redirect(routes.auth.login);
+}
+
+export async function registerAccount(input: unknown): Promise<ActionResult<{ email: string; role: "student" | "teacher" }>> {
+  const parsed = signupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? "Thông tin đăng ký không hợp lệ" };
+
+  try {
+    const { username, fullName, email, password, role } = parsed.data;
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username, full_name: fullName, requested_role: role },
+      },
+    });
+
+    if (error) {
+      return { ok: false, error: "Không thể bắt đầu đăng ký. Hãy kiểm tra thông tin hoặc liên hệ quản trị viên." };
+    }
+
+    return { ok: true, data: { email, role } };
+  } catch {
+    return { ok: false, error: "Không thể kết nối để đăng ký. Vui lòng thử lại sau." };
+  }
+}
+
+export async function verifySignupCode(input: unknown): Promise<ActionResult<{ role: "student" | "teacher"; pendingApproval: boolean }>> {
+  const parsed = signupVerificationSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? "Mã xác nhận không hợp lệ" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: parsed.data.email,
+    token: parsed.data.token,
+    type: "signup",
+  });
+  if (error || !data.user) return { ok: false, error: "Mã xác nhận không đúng hoặc đã hết hạn." };
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role,is_active")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (profileError || !profile) {
+    await supabase.auth.signOut();
+    return { ok: false, error: "Không thể tải hồ sơ tài khoản. Vui lòng liên hệ quản trị viên." };
+  }
+
+  if (profile.role === "teacher" && !profile.is_active) {
+    await supabase.auth.signOut();
+    return { ok: true, data: { role: "teacher", pendingApproval: true } };
+  }
+
+  return {
+    ok: true,
+    data: { role: profile.role === "teacher" ? "teacher" : "student", pendingApproval: false },
+  };
+}
+
+export async function requestPasswordReset(input: unknown): Promise<ActionResult<{ email: string }>> {
+  const parsed = recoveryRequestSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? "Email không hợp lệ" };
+
+  try {
+    const supabase = await createClient();
+    await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/forgot-password`,
+    });
+  } catch {
+    // Keep the response identical whether the email exists or the provider is unavailable.
+  }
+
+  // Keep the response identical whether the email exists, to avoid account enumeration.
+  return { ok: true, data: { email: parsed.data.email } };
+}
+
+export async function completePasswordReset(input: unknown): Promise<ActionResult> {
+  const parsed = recoveryCompleteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? "Dữ liệu khôi phục không hợp lệ" };
+
+  try {
+    const supabase = await createClient();
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: parsed.data.email,
+      token: parsed.data.token,
+      type: "recovery",
+    });
+    if (verifyError) return { ok: false, error: "Mã xác nhận không đúng hoặc đã hết hạn." };
+
+    const { error: updateError } = await supabase.auth.updateUser({ password: parsed.data.newPassword });
+    if (updateError) return { ok: false, error: updateError.message };
+    await supabase.auth.signOut();
+    return { ok: true, data: undefined };
+  } catch {
+    return { ok: false, error: "Không thể cập nhật mật khẩu. Vui lòng thử lại." };
+  }
 }
 
 export async function changePassword(input: unknown): Promise<ActionResult> {

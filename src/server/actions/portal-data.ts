@@ -28,7 +28,7 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
   if (!parsed.success) return { ok: false, error: "Yêu cầu tải dữ liệu không hợp lệ" };
   const { view, id, childId } = parsed.data;
   const profile = await getProfile();
-  if (!profile || profile.id.startsWith("demo-") || !profile.isActive) {
+  if (!profile || !profile.isActive) {
     return { ok: false, error: "Vui lòng đăng nhập bằng tài khoản thật để tải dữ liệu" };
   }
   if (profile.role !== rolesByView[view]) return { ok: false, error: "Bạn không có quyền xem dữ liệu này" };
@@ -76,9 +76,16 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       }
       case "adminUsers": {
         const [profiles, memberships, classes] = await Promise.all([query("profiles"), query("class_students", "student_id,class_id"), query("classes", "id,name")]);
-        return { ok: true, data: { profiles, memberships, classes } };
+        return { ok: true, data: { profiles, memberships, classes, currentUserId: profile.id } };
       }
-      case "adminUser": return { ok: true, data: { profile: await one("profiles", "id", id), memberships: await filtered("class_students", "student_id", id) } };
+      case "adminUser": {
+        const [userProfile, memberships, classes] = await Promise.all([
+          one("profiles", "id", id),
+          filtered("class_students", "student_id", id),
+          query("classes", "id,name,teacher_id,archived_at"),
+        ]);
+        return { ok: true, data: { profile: userProfile, memberships, classes, currentUserId: profile.id } };
+      }
       case "adminClasses": {
         const [classes, profiles, memberships, projects] = await Promise.all([query("classes"), query("profiles", "id,username,full_name,role"), query("class_students", "class_id,student_id"), query("projects", "id,class_id")]);
         return { ok: true, data: { classes, profiles, memberships, projects } };

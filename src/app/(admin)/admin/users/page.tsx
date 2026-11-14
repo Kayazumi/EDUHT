@@ -1,317 +1,177 @@
-// [FE] Danh sách tài khoản · tài liệu mục 3.3, 4.5 và A3.2
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { setActive, setRole } from "@/server/actions/users";
+import { usePortalData } from "@/hooks/use-portal-data";
+import type { Role } from "@/shared/config/roles";
 
+type Row = Record<string, unknown>;
+interface AdminUsersData {
+  profiles: Row[];
+  memberships: Row[];
+  classes: Row[];
+  currentUserId: string;
+}
 interface UserItem {
   id: string;
   username: string;
   fullName: string;
-  role: "admin" | "teacher" | "student";
+  role: Role;
   classes: string;
   isActive: boolean;
   createdAt: string;
 }
+const roles: Role[] = ["admin", "teacher", "student"];
+const text = (row: Row, key: string) => typeof row[key] === "string" ? row[key] as string : "";
+const flag = (row: Row, key: string) => row[key] === true;
 
 export default function AdminUsersPage() {
+  const { data, error: loadError, isLoading, refresh } = usePortalData<AdminUsersData>("adminUsers");
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [classFilter, setClassFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
+  const [error, setError] = useState<string | null>(null);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
 
-  const [users, setUsers] = useState<UserItem[]>([
-    {
-      id: "u-adm-01",
-      username: "admin",
-      fullName: "Nguyễn Văn Admin",
-      role: "admin",
-      classes: "Toàn trường",
-      isActive: true,
-      createdAt: "2026-09-01",
-    },
-    {
-      id: "u-tea-01",
-      username: "gv.nguyenvana",
-      fullName: "Nguyễn Văn An",
-      role: "teacher",
-      classes: "10A1, 10A2",
-      isActive: true,
-      createdAt: "2026-09-02",
-    },
-    {
-      id: "u-tea-02",
-      username: "gv.tranthib",
-      fullName: "Trần Thị Bích",
-      role: "teacher",
-      classes: "11A1, 11A2",
-      isActive: true,
-      createdAt: "2026-09-02",
-    },
-    {
-      id: "u-tea-03",
-      username: "gv.lequangc",
-      fullName: "Lê Quang Cường",
-      role: "teacher",
-      classes: "12A1",
-      isActive: true,
-      createdAt: "2026-09-03",
-    },
-    {
-      id: "u-stu-01",
-      username: "hs.mau01",
-      fullName: "Học Sinh Mẫu 1",
-      role: "student",
-      classes: "10A1",
-      isActive: true,
-      createdAt: "2026-09-05",
-    },
-    {
-      id: "u-stu-02",
-      username: "hs.mau02",
-      fullName: "Học Sinh Mẫu 2",
-      role: "student",
-      classes: "10A1",
-      isActive: true,
-      createdAt: "2026-09-05",
-    },
-    {
-      id: "u-stu-03",
-      username: "hs.phamthid",
-      fullName: "Phạm Thị Dung",
-      role: "student",
-      classes: "10A2",
-      isActive: false,
-      createdAt: "2026-09-05",
-    },
-    {
-      id: "u-stu-04",
-      username: "hs.vuvanh",
-      fullName: "Vũ Văn Hùng",
-      role: "student",
-      classes: "11A1",
-      isActive: true,
-      createdAt: "2026-09-06",
-    },
-  ]);
+  const users = useMemo(() => {
+    if (!data) return [];
+    const classNames = new Map(data.classes.map((row) => [text(row, "id"), text(row, "name")]));
+    const classesByStudent = new Map<string, string[]>();
+    for (const membership of data.memberships) {
+      const studentId = text(membership, "student_id");
+      const className = classNames.get(text(membership, "class_id"));
+      if (!className) continue;
+      classesByStudent.set(studentId, [...(classesByStudent.get(studentId) ?? []), className]);
+    }
+    return data.profiles.map((profile) => {
+      const id = text(profile, "id");
+      const role = roles.includes(profile.role as Role) ? profile.role as Role : "student";
+      const assignedClasses = role === "teacher"
+        ? data.classes.filter((row) => text(row, "teacher_id") === id && !row.archived_at).map((row) => text(row, "name"))
+        : classesByStudent.get(id) ?? [];
+      return {
+        id,
+        username: text(profile, "username"),
+        fullName: text(profile, "full_name"),
+        role,
+        classes: role === "admin" ? "Toàn hệ thống" : assignedClasses.join(", ") || "Chưa phân lớp",
+        isActive: flag(profile, "is_active"),
+        createdAt: text(profile, "created_at"),
+      };
+    });
+  }, [data]);
+  const currentUserId = data?.currentUserId ?? "";
 
-  const handleToggleActive = (id: string, currentStatus: boolean, username: string) => {
-    if (username === "admin") {
-      alert("Không thể khóa tài khoản Quản trị viên hệ thống.");
+  const classOptions = useMemo(() => [...new Set(users.flatMap((user) => user.classes.split(", ").filter((name) => name && name !== "Toàn hệ thống" && name !== "Chưa phân lớp")))].sort(), [users]);
+  const filteredUsers = users.filter((user) => {
+    const matchText = user.username.toLowerCase().includes(searchTerm.toLowerCase()) || user.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchRole = roleFilter === "all" || user.role === roleFilter;
+    const matchStatus = statusFilter === "all" || (statusFilter === "active" && user.isActive) || (statusFilter === "inactive" && !user.isActive);
+    const matchClass = classFilter === "all" || user.classes.split(", ").includes(classFilter);
+    return matchText && matchRole && matchStatus && matchClass;
+  });
+
+  async function changeRole(user: UserItem, nextRole: Role) {
+    if (nextRole === user.role) return;
+    if (!window.confirm(`Đổi vai trò @${user.username} từ ${user.role} sang ${nextRole}? Quyền truy cập sẽ đổi ngay.`)) return;
+    setError(null);
+    setBusyUserId(user.id);
+    const result = await setRole({ userId: user.id, role: nextRole });
+    setBusyUserId(null);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    const action = currentStatus ? "khóa" : "kích hoạt lại";
-    if (confirm(`Bạn có chắc chắn muốn ${action} tài khoản @${username}?`)) {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, isActive: !currentStatus } : u))
-      );
+    refresh();
+  }
+
+  async function toggleActive(user: UserItem) {
+    if (user.id === currentUserId) return;
+    const nextStatus = !user.isActive;
+    if (!window.confirm(`${nextStatus ? "Kích hoạt" : "Khóa"} tài khoản @${user.username}?`)) return;
+    setError(null);
+    setBusyUserId(user.id);
+    const result = await setActive({ userId: user.id, isActive: nextStatus });
+    setBusyUserId(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
     }
-  };
-
-  const filteredUsers = users.filter((u) => {
-    const matchSearch =
-      u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchRole = roleFilter === "all" || u.role === roleFilter;
-    const matchStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && u.isActive) ||
-      (statusFilter === "inactive" && !u.isActive);
-    const matchClass = classFilter === "all" || u.classes.includes(classFilter);
-
-    return matchSearch && matchRole && matchStatus && matchClass;
-  });
+    refresh();
+  }
 
   return (
     <div className="space-y-6">
-      {/* Tiêu đề & Hành động */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Quản lý tài khoản người dùng
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Danh sách giáo viên, học sinh và quản trị viên trong hệ thống PBL
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">Quản lý tài khoản</h1>
+          <p className="text-sm text-slate-500 mt-1">Danh sách được tải từ Supabase. Admin có thể điều chỉnh vai trò các tài khoản khác.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/admin/users/new"
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
-          >
-            + Tạo giáo viên
-          </Link>
-          <Link
-            href="/admin/users/import"
-            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-sm font-medium rounded-lg shadow-sm transition-colors"
-          >
-            Nhập CSV học sinh
-          </Link>
+        <div className="flex gap-2">
+          <Link href="/register" className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg">+ Đăng ký tài khoản</Link>
+          <Link href="/admin/users/import" className="px-4 py-2 bg-white text-slate-700 border border-slate-300 text-sm font-medium rounded-lg">Nhập CSV học sinh</Link>
         </div>
       </div>
 
-      {/* Thanh công cụ tìm kiếm và lọc */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-            Tìm kiếm
-          </label>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Username hoặc họ tên..."
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+      {(error || loadError) && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">{error || loadError}</div>}
+      {isLoading ? <p className="text-sm text-slate-500">Đang tải tài khoản...</p> : (
+        <>
+          <div className="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label className="text-xs font-semibold text-slate-500">Tìm kiếm
+              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Username hoặc họ tên" className="mt-1 w-full px-3 py-2 text-sm border rounded-lg" />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">Vai trò
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="mt-1 w-full px-3 py-2 text-sm border rounded-lg bg-white">
+                <option value="all">Tất cả</option><option value="admin">Admin</option><option value="teacher">Giáo viên</option><option value="student">Học sinh</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-500">Lớp học
+              <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="mt-1 w-full px-3 py-2 text-sm border rounded-lg bg-white">
+                <option value="all">Tất cả lớp</option>{classOptions.map((name) => <option key={name}>{name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-500">Trạng thái
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="mt-1 w-full px-3 py-2 text-sm border rounded-lg bg-white">
+                <option value="all">Tất cả</option><option value="active">Đang hoạt động</option><option value="inactive">Chờ duyệt/đã khóa</option>
+              </select>
+            </label>
+          </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-            Vai trò
-          </label>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-          >
-            <option value="all">Tất cả vai trò</option>
-            <option value="admin">Quản trị viên (Admin)</option>
-            <option value="teacher">Giáo viên (Teacher)</option>
-            <option value="student">Học sinh (Student)</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-            Lớp học
-          </label>
-          <select
-            value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-          >
-            <option value="all">Tất cả các lớp</option>
-            <option value="10A1">10A1</option>
-            <option value="10A2">10A2</option>
-            <option value="11A1">11A1</option>
-            <option value="11A2">11A2</option>
-            <option value="12A1">12A1</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-            Trạng thái
-          </label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="inactive">Đã khóa</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Bảng danh sách người dùng */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
-              <tr>
-                <th className="py-3.5 px-4">Tên đăng nhập</th>
-                <th className="py-3.5 px-4">Họ và tên</th>
-                <th className="py-3.5 px-4">Vai trò</th>
-                <th className="py-3.5 px-4">Lớp / Phụ trách</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4">Ngày tạo</th>
-                <th className="py-3.5 px-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
-                    Không tìm thấy tài khoản nào khớp với điều kiện lọc
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-slate-900">
-                      @{user.username}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-slate-900">
-                      {user.fullName}
-                    </td>
-                    <td className="py-3 px-4">
-                      {user.role === "admin" && (
-                        <Badge variant="danger">Quản trị viên</Badge>
-                      )}
-                      {user.role === "teacher" && (
-                        <Badge variant="info">Giáo viên</Badge>
-                      )}
-                      {user.role === "student" && (
-                        <Badge variant="default">Học sinh</Badge>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 font-medium">
-                      {user.classes}
-                    </td>
-                    <td className="py-3 px-4">
-                      {user.isActive ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Hoạt động
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-rose-700 font-semibold bg-rose-50 px-2.5 py-1 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                          Đã khóa
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">
-                      {user.createdAt}
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-2">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
-                      >
-                        Chi tiết
-                      </Link>
-                      {user.role !== "admin" && (
-                        <button
-                          onClick={() => handleToggleActive(user.id, user.isActive, user.username)}
-                          className={`text-xs font-semibold hover:underline ${
-                            user.isActive
-                              ? "text-rose-600 hover:text-rose-800"
-                              : "text-emerald-600 hover:text-emerald-800"
-                          }`}
-                        >
-                          {user.isActive ? "Khóa" : "Mở khóa"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Hiển thị <strong>{filteredUsers.length}</strong> / <strong>{users.length}</strong> người dùng
-          </span>
-          <span className="italic">
-            Mật khẩu không bao giờ được lưu dưới dạng văn bản rõ hay hiển thị trên giao diện.
-          </span>
-        </div>
-      </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-slate-700 font-semibold"><tr>
+                  <th className="py-3 px-4">Username</th><th className="py-3 px-4">Họ tên</th><th className="py-3 px-4">Vai trò</th><th className="py-3 px-4">Lớp/phụ trách</th><th className="py-3 px-4">Trạng thái</th><th className="py-3 px-4">Ngày tạo</th><th className="py-3 px-4">Thao tác</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredUsers.length === 0 ? <tr><td colSpan={7} className="py-8 text-center text-slate-400">Không có tài khoản phù hợp.</td></tr> : filteredUsers.map((user) => {
+                    const isSelf = user.id === currentUserId;
+                    return <tr key={user.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono font-medium text-slate-900">@{user.username}</td>
+                      <td className="py-3 px-4">{user.fullName}</td>
+                      <td className="py-3 px-4">
+                        <select aria-label={`Vai trò của ${user.username}`} value={user.role} disabled={isSelf || busyUserId === user.id} onChange={(e) => changeRole(user, e.target.value as Role)} className="px-2 py-1 border rounded bg-white disabled:opacity-50">
+                          <option value="admin">Admin</option><option value="teacher">Giáo viên</option><option value="student">Học sinh</option>
+                        </select>
+                      </td>
+                      <td className="py-3 px-4">{user.classes}</td>
+                      <td className="py-3 px-4">{user.isActive ? <span className="text-emerald-700">Hoạt động</span> : <span className="text-amber-700">Chờ duyệt/đã khóa</span>}</td>
+                      <td className="py-3 px-4 text-xs">{user.createdAt ? new Date(user.createdAt).toLocaleDateString("vi-VN") : "—"}</td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <Link href={`/admin/users/${user.id}`} className="text-indigo-600 hover:underline mr-3">Chi tiết</Link>
+                        <button disabled={isSelf || busyUserId === user.id} onClick={() => toggleActive(user)} className="text-rose-600 hover:underline disabled:opacity-50">{user.isActive ? "Khóa" : "Kích hoạt"}</button>
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t text-xs text-slate-500">Hiển thị {filteredUsers.length} / {users.length} tài khoản. Bạn không thể tự đổi vai trò hoặc tự khóa tài khoản.</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
