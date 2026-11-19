@@ -82,11 +82,12 @@ Hệ thống hỗ trợ đăng nhập bằng **Tên đăng nhập (Username)** h
 | :--- | :--- | :--- | :--- |
 | **Quản trị viên (Admin)** | `admin`, `admin1`, `admin2`, `admin3` | `Abc_1111` | Toàn quyền cấu hình hệ thống, quản lý người dùng và dự án |
 | **Giáo viên (Teacher)** | `gv01` | `Abc_1111` | Quản lý lớp học, tạo tài khoản học sinh (thủ công / Excel), chấm điểm BARS, theo dõi Kanban |
-| **Học sinh (Student)** | `spt01` đến `spt60` | `Abc_1111` | • **Lớp 10C4:** `spt01` – `spt30`<br>• **Lớp 10C5:** `spt31` – `spt60`<br>Thực hiện nhiệm vụ Kanban, đánh giá đồng đẳng (Peer review) |
+| **Học sinh (Student)** | `spt01` đến `spt60` | `Abc_1111` | • **Lớp 10C4:** `spt01` – `spt30` (5 nhóm x 5 HS = 25 HS, dư 5 HS `spt26`–`spt30` chưa có nhóm để thử tính năng phân nhóm)<br>• **Lớp 10C5:** `spt31` – `spt60` (5 nhóm x 5 HS = 25 HS, dư 5 HS `spt56`–`spt60` chưa có nhóm)<br>Thực hiện nhiệm vụ Kanban, đánh giá đồng đẳng (Peer review) |
 
 > [!NOTE]
-> - **Tài khoản học sinh mới:** Khi giáo viên tạo học sinh mới (tạo từng bạn hoặc nhập danh sách hàng loạt từ file Excel/CSV), mật khẩu khởi tạo mặc định cho học sinh luôn là `Abc_1111`.
+> - **Tài khoản học sinh mới:** Admin và Giáo viên đều có thể tạo tài khoản học sinh (tạo thủ công 1-1 tại `/admin/users/new-student` hoặc `/teacher/classes/[classId]`, hoặc nhập hàng loạt từ file Excel/CSV). Mật khẩu mặc định luôn là `Abc_1111`.
 > - **Khôi phục mật khẩu học sinh:** Nếu học sinh quên mật khẩu, giáo viên có thể vào mục **Lớp học & Học sinh** (`/teacher/classes/[classId]`) để **Đặt lại mật khẩu** cho từng học sinh hoặc **Đặt lại mật khẩu toàn bộ lớp** về mặc định `Abc_1111`.
+> - **Thử nghiệm phân nhóm:** Mỗi dự án đã được cấu hình sẵn 5 nhóm và chừa đúng 5 bạn học sinh chưa có nhóm trong CSDL. Giáo viên có thể trực tiếp tìm kiếm học sinh và bấm "Thêm vào nhóm" / "Gỡ khỏi nhóm" để kiểm thử thao tác lưu thực tế xuống database PostgreSQL.
 > - Tài khoản có email placeholder kết thúc bằng `@example.invalid` không nhận email thật; admin hoặc giáo viên có thể hỗ trợ reset mật khẩu trực tiếp trong hệ thống mà không cần OTP email.
 
 Tài khoản có email placeholder không nhận thư sẽ không thể dùng quên mật khẩu cho tới khi admin cập nhật email thật. Giáo viên tự đăng ký phải được admin kích hoạt sau khi xác minh email. Admin không có form tự đăng ký; admin khác phải nâng vai trò tài khoản hiện có.
@@ -216,8 +217,9 @@ src/app/
 │   ├── layout.tsx                   # Khung và kiểm tra quyền admin
 │   ├── page.tsx                     # Dashboard tổng quan admin (dữ liệu thật Supabase + biểu đồ Recharts)
 │   ├── profile/page.tsx             # Hồ sơ Quản trị viên & Đổi mật khẩu (cập nhật họ tên, phân cấp quyền)
-│   ├── users/page.tsx               # Quản lý tài khoản, đổi vai trò, khóa/mở và chuyển trang tạo giáo viên
+│   ├── users/page.tsx               # Quản lý tài khoản, đổi vai trò, khóa/mở và chuyển trang tạo giáo viên/học sinh
 │   ├── users/new/page.tsx           # Tạo tài khoản giáo viên mới (kết nối createTeacher Server Action)
+│   ├── users/new-student/page.tsx   # Tạo tài khoản 1 học sinh và ghi danh vào lớp học
 │   ├── users/import/page.tsx        # Import danh sách học sinh từ file CSV
 │   ├── users/[userId]/page.tsx      # Chi tiết/kích hoạt/đặt lại tài khoản người dùng
 │   ├── classes/page.tsx             # Quản lý danh sách lớp học (2 lớp thật 10C4, 10C5 kết nối Supabase)
@@ -231,7 +233,7 @@ src/app/
 │   ├── page.tsx                     # Dashboard giáo viên (việc cần làm ưu tiên và dự án đang chạy)
 │   ├── profile/page.tsx             # Hồ sơ Giáo viên & Đổi mật khẩu (cập nhật họ tên, tổ bộ môn, chuyên môn)
 │   ├── classes/page.tsx             # Quản lý danh sách lớp phụ trách (10C4, 10C5)
-│   ├── classes/[classId]/page.tsx   # Quản lý học sinh lớp phụ trách (+ Thêm 1 HS, đặt lại mật khẩu)
+│   ├── classes/[classId]/page.tsx   # Quản lý học sinh lớp phụ trách (+ Thêm 1 HS, đặt lại mật khẩu, tìm kiếm học sinh)
 │   ├── classes/[classId]/students/import/page.tsx # Nhập học sinh đồng loạt từ file Excel (.xlsx, .xls) hoặc CSV
 │   └── projects/
 │       ├── page.tsx                 # Danh sách dự án PBL
@@ -239,7 +241,7 @@ src/app/
 │       └── [projectId]/
 │           ├── page.tsx             # Tổng quan và trạng thái dự án
 │           ├── tasks/page.tsx       # Mẫu nhiệm vụ và yêu cầu cần đạt
-│           ├── groups/page.tsx      # Tạo/quản lý nhóm học sinh
+│           ├── groups/page.tsx      # Quản lý nhóm và phân công thực tế từ CSDL (kết nối Supabase, tìm kiếm học sinh)
 │           ├── groups/[groupId]/page.tsx # Chi tiết nhóm
 │           ├── dashboard/page.tsx   # Biểu đồ tiến độ/đóng góp
 │           ├── evaluation/page.tsx  # Danh sách đợt đánh giá BARS

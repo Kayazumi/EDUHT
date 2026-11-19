@@ -148,7 +148,7 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
           project ? filtered("class_students", "class_id", rowString(project, "class_id")) : Promise.resolve([]),
         ]);
         const profiles = await ids("profiles", "id", students.map((row) => rowString(row, "student_id")));
-        return { ok: true, data: { groups, members, students: profiles } };
+        return { ok: true, data: { project, groups, members, students: profiles } };
       }
       case "teacherGroup": {
         const group = await one("groups", "id", childId);

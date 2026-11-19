@@ -67,6 +67,9 @@ export default function TeacherClassDetailPage({
   } | null>(null);
   const [isResettingSingle, setIsResettingSingle] = useState<string | null>(null);
 
+  // State tìm kiếm học sinh trong lớp
+  const [studentSearchTerm, setStudentSearchTerm] = useState("");
+
   React.useEffect(() => {
     params.then((p) => setResolvedClassId(p.classId));
   }, [params]);
@@ -80,6 +83,15 @@ export default function TeacherClassDetailPage({
   const schoolYear = readString(data.class, "school_year", "2026-2027");
   const students = data.students ?? [];
   const projects = data.projects ?? [];
+
+  const filteredStudents = students.filter((s) => {
+    const q = studentSearchTerm.toLowerCase().trim();
+    if (!q) return true;
+    const fullName = readString(s, "full_name").toLowerCase();
+    const username = readString(s, "username").toLowerCase();
+    const studentCode = readString(s, "student_code").toLowerCase();
+    return fullName.includes(q) || username.includes(q) || studentCode.includes(q);
+  });
 
   // Xử lý tạo thủ công 1 học sinh
   const handleCreateStudent = async (e: React.FormEvent) => {
@@ -277,24 +289,46 @@ export default function TeacherClassDetailPage({
       )}
 
       {/* Bảng danh sách học sinh */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-900">
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 font-title">
               Danh sách học sinh lớp {className} ({students.length})
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Mật khẩu khởi tạo mặc định cho học sinh: <span className="font-mono font-bold text-blue-600">{DEFAULT_STUDENT_PASSWORD}</span>
             </p>
           </div>
-          <span className="text-xs text-slate-500">
-            Tổng cộng: <strong>{students.length}</strong> học sinh
-          </span>
+
+          <div className="flex items-center gap-3">
+            {/* Ô tìm kiếm học sinh */}
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                value={studentSearchTerm}
+                onChange={(e) => setStudentSearchTerm(e.target.value)}
+                placeholder="🔍 Tìm theo tên, mã HS..."
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {studentSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setStudentSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0 hidden sm:inline">
+              Hiển thị: <strong>{filteredStudents.length}</strong> / {students.length} em
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 font-semibold border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="py-3 px-4 w-12 text-center">STT</th>
                 <th className="py-3 px-4">Mã học sinh</th>
@@ -303,16 +337,22 @@ export default function TeacherClassDetailPage({
                 <th className="py-3 px-4 text-right">Thao tác mật khẩu</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                  <td colSpan={5} className="py-8 text-center text-slate-500 dark:text-slate-400">
                     Lớp chưa có học sinh nào. Bạn có thể bấm <strong>“+ Thêm 1 học sinh”</strong> hoặc{" "}
                     <strong>“Nhập từ Excel / CSV”</strong> để tạo tài khoản.
                   </td>
                 </tr>
+              ) : filteredStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500 dark:text-slate-400">
+                    Không tìm thấy học sinh nào khớp với từ khóa &quot;{studentSearchTerm}&quot;.
+                  </td>
+                </tr>
               ) : (
-                students.map((student, idx) => {
+                filteredStudents.map((student, idx) => {
                   const sId = readString(student, "id");
                   const sUsername = readString(student, "username");
                   const sFullName = readString(student, "full_name");

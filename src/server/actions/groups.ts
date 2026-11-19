@@ -26,7 +26,7 @@ export async function createGroup(input: unknown): Promise<ActionResult<{ id: st
       .from("groups")
       .insert({
         project_id: projectId,
-        name,
+        name: name.trim(),
       })
       .select("id")
       .single();
@@ -60,7 +60,7 @@ export async function renameGroup(input: unknown): Promise<ActionResult> {
 
     const { error } = await supabase
       .from("groups")
-      .update({ name })
+      .update({ name: name.trim() })
       .eq("id", groupId);
 
     if (error) {
@@ -74,6 +74,41 @@ export async function renameGroup(input: unknown): Promise<ActionResult> {
   }
 }
 
+const deleteGroupSchema = z.object({
+  groupId: z.string().uuid("Mã nhóm không hợp lệ"),
+});
+
+export async function deleteGroup(input: unknown): Promise<ActionResult> {
+  try {
+    await requireRole("teacher");
+    const parsed = deleteGroupSchema.safeParse(input);
+    if (!parsed.success) {
+      return { ok: false, error: "Mã nhóm không hợp lệ" };
+    }
+    const { groupId } = parsed.data;
+    const supabase = await createClient();
+
+    // Xóa các thành viên nhóm trước
+    await supabase.from("group_members").delete().eq("group_id", groupId);
+    // Xóa các thẻ nhiệm vụ của nhóm nếu có
+    await supabase.from("tasks").delete().eq("group_id", groupId);
+
+    const { error } = await supabase
+      .from("groups")
+      .delete()
+      .eq("id", groupId);
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    return { ok: true, data: undefined };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Lỗi xóa nhóm";
+    return { ok: false, error: msg };
+  }
+}
+
 const assignMemberSchema = z.object({
   groupId: z.string().uuid("Mã nhóm không hợp lệ"),
   studentId: z.string().uuid("Mã học sinh không hợp lệ"),
@@ -82,22 +117,50 @@ const assignMemberSchema = z.object({
 
 export async function assignMember(input: unknown): Promise<ActionResult> {
   try {
+    await requireRole("teacher");
     const parsed = assignMemberSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: "Dữ liệu phân nhóm không hợp lệ" };
     }
 
     const { groupId, studentId, projectId } = parsed.data;
-    await requireRole("teacher");
     const supabase = await createClient();
-    const { error } = await supabase.rpc("assign_project_member", {
-      p_project_id: projectId,
-      p_group_id: groupId,
-      p_student_id: studentId,
-    });
 
-    if (error) {
-      return { ok: false, error: error.message };
+    // Lấy thông tin dự án và lớp học
+    const { data: project, error: projErr } = await supabase
+      .from("projects")
+      .select("id, class_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (projErr || !project) {
+      return { ok: false, error: "Không tìm thấy dự án học tập" };
+    }
+
+    // Kiểm tra học sinh có thuộc lớp không
+    const { data: enrolled } = await supabase
+      .from("class_students")
+      .select("student_id")
+      .eq("class_id", project.class_id)
+      .eq("student_id", studentId)
+      .maybeSingle();
+
+    if (!enrolled) {
+      return { ok: false, error: "Học sinh không thuộc lớp học của dự án này" };
+    }
+
+    // Cập nhật hoặc thêm thành viên vào nhóm (upsert đảm bảo mỗi học sinh chỉ thuộc 1 nhóm trong 1 dự án)
+    const { error: upsertErr } = await supabase
+      .from("group_members")
+      .upsert({
+        group_id: groupId,
+        student_id: studentId,
+        project_id: projectId,
+        class_id: project.class_id,
+      }, { onConflict: "project_id,student_id" });
+
+    if (upsertErr) {
+      return { ok: false, error: "Lỗi ghi nhận thành viên vào CSDL: " + upsertErr.message };
     }
 
     return { ok: true, data: undefined };
@@ -108,8 +171,8 @@ export async function assignMember(input: unknown): Promise<ActionResult> {
 }
 
 const removeMemberSchema = z.object({
-  groupId: z.string().uuid(),
-  studentId: z.string().uuid(),
+  groupId: z.string().uuid("Mã nhóm không hợp lệ"),
+  studentId: z.string().uuid("Mã học sinh không hợp lệ"),
 });
 
 export async function removeMember(input: unknown): Promise<ActionResult> {
@@ -135,13 +198,13 @@ export async function removeMember(input: unknown): Promise<ActionResult> {
 
     return { ok: true, data: undefined };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Lỗi xóa thành viên khỏi nhóm";
+    const msg = err instanceof Error ? err.message : "Lỗi gỡ học sinh khỏi nhóm";
     return { ok: false, error: msg };
   }
 }
 
 const lockGroupsSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.string().uuid("Mã dự án không hợp lệ"),
 });
 
 export async function lockGroups(input: unknown): Promise<ActionResult> {
@@ -155,17 +218,18 @@ export async function lockGroups(input: unknown): Promise<ActionResult> {
     const { projectId } = parsed.data;
     const supabase = await createClient();
 
-    const { error: rpcErr } = await supabase.rpc("lock_project_groups", {
-      p_project_id: projectId,
-    });
+    const { error: lockErr } = await supabase
+      .from("groups")
+      .update({ locked_at: new Date().toISOString() })
+      .eq("project_id", projectId);
 
-    if (rpcErr) {
-      return { ok: false, error: rpcErr.message };
+    if (lockErr) {
+      return { ok: false, error: lockErr.message };
     }
 
     return { ok: true, data: undefined };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Lỗi khóa nhóm dự án";
+    const msg = err instanceof Error ? err.message : "Lỗi khóa nhóm";
     return { ok: false, error: msg };
   }
 }

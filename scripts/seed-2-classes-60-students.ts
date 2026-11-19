@@ -20,6 +20,21 @@ if (!url || !serviceKey) {
 
 const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, delayMs = 1000): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (i < retries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function main() {
   console.log("=== Bắt đầu đồng bộ 2 lớp học và 60 học sinh vào Database ===");
 
@@ -111,33 +126,35 @@ async function main() {
 
     studentUserIds.set(code, authUser.id);
 
-    // Upsert profile
-    const { error: profError } = await supabase.from("profiles").upsert({
-      id: authUser.id,
-      role: "student",
-      username,
-      full_name: fullName,
-      student_code: code,
-      is_active: true,
-      must_change_password: false,
-    }, { onConflict: "id" });
-    if (profError) throw new Error(`Lỗi upsert profile ${username}: ${profError.message}`);
+    await withRetry(async () => {
+      // Upsert profile
+      const { error: profError } = await supabase.from("profiles").upsert({
+        id: authUser.id,
+        role: "student",
+        username,
+        full_name: fullName,
+        student_code: code,
+        is_active: true,
+        must_change_password: false,
+      }, { onConflict: "id" });
+      if (profError) throw new Error(`Lỗi upsert profile ${username}: ${profError.message}`);
 
-    // Ghi danh vào lớp
-    const { error: csError } = await supabase.from("class_students").upsert({
-      class_id: classId,
-      student_id: authUser.id,
-    }, { onConflict: "class_id,student_id" });
-    if (csError) throw new Error(`Lỗi ghi danh ${username} vào lớp: ${csError.message}`);
+      // Ghi danh vào lớp
+      const { error: csError } = await supabase.from("class_students").upsert({
+        class_id: classId,
+        student_id: authUser.id,
+      }, { onConflict: "class_id,student_id" });
+      if (csError) throw new Error(`Lỗi ghi danh ${username} vào lớp: ${csError.message}`);
 
-    // Ghi nhận đồng ý nghiên cứu (Research Consent)
-    await supabase.from("research_consents").upsert({
-      student_id: authUser.id,
-      class_id: classId,
-      consent_form_version: "v1.0",
-      is_consented: true,
-      consented_at: new Date().toISOString(),
-    }, { onConflict: "student_id,class_id" });
+      // Ghi nhận đồng ý nghiên cứu (Research Consent)
+      await supabase.from("research_consents").upsert({
+        student_id: authUser.id,
+        class_id: classId,
+        consent_form_version: "v1.0",
+        is_consented: true,
+        consented_at: new Date().toISOString(),
+      }, { onConflict: "student_id,class_id" });
+    });
   }
   console.log("Đã cập nhật đầy đủ 60 học sinh vào profiles, class_students và research_consents.");
 
@@ -158,9 +175,19 @@ async function main() {
   }, { onConflict: "id" });
   if (p1Error) throw new Error(`Lỗi cập nhật dự án 1: ${p1Error.message}`);
 
-  // Đảm bảo 30 học sinh lớp 10C4 được xếp nhóm trong Dự án 1
-  const groups1 = Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`);
-  for (let g = 0; g < 6; g++) {
+  // 4. Cấu hình Dự án 1 (10C4): Phân 5 nhóm (mỗi nhóm 5 HS: spt01 -> spt25), dư đúng 5 HS (spt26 -> spt30) chưa có nhóm để thử nghiệm tính năng
+  const oldGroup6P1 = "00000000-0000-4000-8000-000000000006";
+  const unassignedCodes1 = ["SPT26", "SPT27", "SPT28", "SPT29", "SPT30"];
+  const unassignedIds1 = unassignedCodes1.map((c) => studentUserIds.get(c)!).filter(Boolean);
+  if (unassignedIds1.length > 0) {
+    await supabase.from("group_members").delete().eq("project_id", PROJECT_1_ID).in("student_id", unassignedIds1);
+  }
+  await supabase.from("tasks").delete().eq("group_id", oldGroup6P1);
+  await supabase.from("group_members").delete().eq("group_id", oldGroup6P1);
+  await supabase.from("groups").delete().eq("id", oldGroup6P1);
+
+  const groups1 = Array.from({ length: 5 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`);
+  for (let g = 0; g < 5; g++) {
     const groupId = groups1[g];
     const groupName = `Nhóm ${String(g + 1).padStart(2, "0")} — Thuyết trình PPT`;
     await supabase.from("groups").upsert({
@@ -169,7 +196,7 @@ async function main() {
       name: groupName,
     }, { onConflict: "id" });
 
-    // 5 học sinh mỗi nhóm
+    // 5 học sinh mỗi nhóm: spt01 -> spt25 (5 x 5 = 25 HS)
     for (let s = 0; s < 5; s++) {
       const studentIndex = g * 5 + s + 1;
       const code = `SPT${String(studentIndex).padStart(2, "0")}`;
@@ -183,7 +210,17 @@ async function main() {
     }
   }
 
-  // 5. Cấu hình Dự án 2 (10C5) - Hoạt động cho spt31 -> spt60
+  // 5. Cấu hình Dự án 2 (10C5) - Hoạt động cho spt31 -> spt60 (5 nhóm x 5 = 25 HS, dư đúng 5 HS spt56 -> spt60 chưa có nhóm)
+  const oldGroup6P2 = "00000000-0000-5000-8000-000000000006";
+  const unassignedCodes2 = ["SPT56", "SPT57", "SPT58", "SPT59", "SPT60"];
+  const unassignedIds2 = unassignedCodes2.map((c) => studentUserIds.get(c)!).filter(Boolean);
+  if (unassignedIds2.length > 0) {
+    await supabase.from("group_members").delete().eq("project_id", PROJECT_2_ID).in("student_id", unassignedIds2);
+  }
+  await supabase.from("tasks").delete().eq("group_id", oldGroup6P2);
+  await supabase.from("group_members").delete().eq("group_id", oldGroup6P2);
+  await supabase.from("groups").delete().eq("id", oldGroup6P2);
+
   const { error: p2Error } = await supabase.from("projects").upsert({
     id: PROJECT_2_ID,
     class_id: CLASS_2_ID,
@@ -200,17 +237,16 @@ async function main() {
   }, { onConflict: "id" });
   if (p2Error) throw new Error(`Lỗi cập nhật dự án 2: ${p2Error.message}`);
 
-  // Tạo 6 nhóm cho Dự án 2 (10C5)
+  // Tạo 5 nhóm cho Dự án 2 (10C5)
   const groupNames2 = [
     "Nhóm 01 — AI và An toàn thông tin",
     "Nhóm 02 — Phòng chống Deepfake & Tin giả",
     "Nhóm 03 — Quyền tác giả và Đạo đức AI",
     "Nhóm 04 — Bảo vệ dữ liệu cá nhân trên mạng",
     "Nhóm 05 — Ứng xử số văn minh trong trường học",
-    "Nhóm 06 — Pháp luật An ninh mạng THPT",
   ];
 
-  const groups2 = Array.from({ length: 6 }, (_, i) => `00000000-0000-5000-8000-${String(i + 1).padStart(12, "0")}`);
+  const groups2 = Array.from({ length: 5 }, (_, i) => `00000000-0000-5000-8000-${String(i + 1).padStart(12, "0")}`);
   const taskTitles2 = [
     "Khảo sát và xác định chủ đề cẩm nang",
     "Thu thập và kiểm chứng dữ liệu tình huống",
@@ -231,7 +267,7 @@ async function main() {
   ];
   const statuses: ("todo" | "doing" | "done")[] = ["done", "doing", "todo", "todo"];
 
-  for (let g = 0; g < 6; g++) {
+  for (let g = 0; g < 5; g++) {
     const groupId = groups2[g];
     const groupName = groupNames2[g];
     await supabase.from("groups").upsert({
@@ -240,9 +276,9 @@ async function main() {
       name: groupName,
     }, { onConflict: "id" });
 
-    // 5 học sinh mỗi nhóm từ spt31 -> spt60
+    // 5 học sinh mỗi nhóm từ spt31 -> spt55 (5 x 5 = 25 HS; spt56 -> spt60 chưa có nhóm)
     for (let s = 0; s < 5; s++) {
-      const studentIndex = 30 + g * 5 + s + 1; // 31..60
+      const studentIndex = 30 + g * 5 + s + 1; // 31..55
       const code = `SPT${String(studentIndex).padStart(2, "0")}`;
       const sId = studentUserIds.get(code)!;
       await supabase.from("group_members").upsert({
