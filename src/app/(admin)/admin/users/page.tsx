@@ -110,8 +110,8 @@ export default function AdminUsersPage() {
           <p className="text-sm text-slate-500 mt-1">Danh sách được tải từ Supabase. Admin có thể điều chỉnh vai trò các tài khoản khác.</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/register" className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg">+ Đăng ký tài khoản</Link>
-          <Link href="/admin/users/import" className="px-4 py-2 bg-white text-slate-700 border border-slate-300 text-sm font-medium rounded-lg">Nhập CSV học sinh</Link>
+          <Link href="/admin/users/new" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">+ Thêm giáo viên</Link>
+          <Link href="/admin/users/import" className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-sm font-medium rounded-lg shadow-sm transition-colors">Nhập CSV học sinh</Link>
         </div>
       </div>
 

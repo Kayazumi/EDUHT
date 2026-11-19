@@ -4,9 +4,135 @@
 @import "./print.css";
 
 @layer base {
+  :root {
+    --font-title-family: var(--font-title), "Lexend", sans-serif;
+    --font-sans-family: var(--font-sans), "Be Vietnam Pro", system-ui, -apple-system, sans-serif;
+    --font-mono-family: var(--font-mono), "JetBrains Mono", monospace;
+  }
+
   body {
+    font-family: var(--font-sans-family);
     background-color: #f8fafc;
     color: #0f172a;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
+
+  /* 3 font chữ chuyên biệt cho toàn bộ ứng dụng:
+     1. Tiêu đề / Heading: font-title (Lexend) - Hiện đại, thu hút, đường nét hình học cân đối
+     2. Nội dung / Văn bản: font-sans (Be Vietnam Pro) - Tối ưu tiếng Việt, không chân, siêu nét
+     3. Mã số / Username / Tech: font-mono (JetBrains Mono)
+  */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-title-family);
+    /* Chống rớt 1 chữ xuống 1 dòng (orphan prevention) */
+    text-wrap: balance;
+  }
+
+  p, span, label, td, th {
+    /* Chống chữ đơn lẻ rơi xuống cuối đoạn văn */
+    text-wrap: pretty;
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: var(--font-mono-family);
+  }
+}
+
+/* Kiểu dáng cho Chế độ Tối (Dark Mode) */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b1120;
+  color: #f1f5f9;
+}
+
+html.dark .bg-white {
+  background-color: #131d33;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-gray-50 {
+  background-color: #0b1120;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-gray-100 {
+  background-color: #1e293b;
+}
+
+html.dark .bg-slate-200,
+html.dark .bg-gray-200 {
+  background-color: #334155;
+}
+
+html.dark .border-slate-200,
+html.dark .border-gray-200,
+html.dark .border-slate-100,
+html.dark .border-gray-100 {
+  border-color: #1e293b;
+}
+
+html.dark .border-slate-300,
+html.dark .border-gray-300 {
+  border-color: #334155;
+}
+
+html.dark .text-slate-900,
+html.dark .text-gray-900 {
+  color: #f8fafc;
+}
+
+html.dark .text-slate-800,
+html.dark .text-gray-800,
+html.dark .text-slate-700,
+html.dark .text-gray-700 {
+  color: #cbd5e1;
+}
+
+html.dark .text-slate-600,
+html.dark .text-gray-600,
+html.dark .text-slate-500,
+html.dark .text-gray-500 {
+  color: #94a3b8;
+}
+
+html.dark .divide-slate-100 > *,
+html.dark .divide-gray-100 > * {
+  border-color: #1e293b;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-gray-50:hover {
+  background-color: #1a253c;
+}
+
+html.dark .hover\:bg-slate-100:hover,
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #24324c;
+}
+
+/* Tiện ích typography */
+.font-title {
+  font-family: var(--font-title-family);
+}
+
+.font-content {
+  font-family: var(--font-sans-family);
 }

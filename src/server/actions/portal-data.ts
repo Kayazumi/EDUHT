@@ -188,31 +188,75 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
       }
       case "studentDashboard":
       case "studentProfile": {
-        const memberships = await filtered("group_members", "student_id", profile.id);
-        const projects = await ids("projects", "id", memberships.map((row) => rowString(row, "project_id")));
+        const [memberships, classEnrollments, consents] = await Promise.all([
+          filtered("group_members", "student_id", profile.id),
+          filtered("class_students", "student_id", profile.id),
+          filtered("research_consents", "student_id", profile.id),
+        ]);
+
+        const enrolledClassIds = classEnrollments.map((row) => rowString(row, "class_id"));
+        const [groupedProjects, classProjects] = await Promise.all([
+          ids("projects", "id", memberships.map((row) => rowString(row, "project_id"))),
+          ids("projects", "class_id", enrolledClassIds),
+        ]);
+
+        // Gộp toàn bộ dự án từ nhóm và dự án của lớp học sinh đã ghi danh
+        const allProjectsMap = new Map<string, DataRow>();
+        for (const p of [...groupedProjects, ...classProjects]) {
+          allProjectsMap.set(rowString(p, "id"), p);
+        }
+        const projects = Array.from(allProjectsMap.values());
+
         const groupIds = [...new Set(memberships.map((row) => rowString(row, "group_id")))];
-        const [tasks, consents, rounds, groups] = await Promise.all([
-          ids("tasks", "group_id", groupIds), filtered("research_consents", "student_id", profile.id),
+        const [tasks, rounds, groups] = await Promise.all([
+          ids("tasks", "group_id", groupIds),
           projects.length ? ids("evaluation_rounds", "project_id", projects.map((row) => rowString(row, "id"))) : Promise.resolve([]),
           ids("groups", "id", groupIds),
         ]);
-        const classes = await ids("classes", "id", projects.map((row) => rowString(row, "class_id")));
+
+        const allClassIds = [...new Set([...enrolledClassIds, ...projects.map((row) => rowString(row, "class_id"))])];
+        const classes = await ids("classes", "id", allClassIds);
         const teachers = await ids("profiles", "id", classes.map((row) => rowString(row, "teacher_id")));
         const groupProgress = projects.length ? await ids("v_group_progress", "project_id", projects.map((row) => rowString(row, "id"))) : [];
         return { ok: true, data: { profile, memberships, projects, tasks, consents, rounds, groups, classes, teachers, groupProgress } };
       }
       case "studentProject":
       case "studentBoard": {
-        const membership = await db.from("group_members").select("group_id,project_id,student_id").eq("student_id", profile.id).eq("project_id", id ?? "").maybeSingle();
-        if (membership.error) throw membership.error;
-        if (!membership.data) return { ok: false, error: "Bạn chưa thuộc nhóm trong dự án này" };
+        let membershipData = await db.from("group_members").select("group_id,project_id,student_id").eq("student_id", profile.id).eq("project_id", id ?? "").maybeSingle();
+        if (membershipData.error) throw membershipData.error;
+
+        // Nếu chưa có trong group_members, kiểm tra xem có thuộc lớp của dự án không
+        if (!membershipData.data && id) {
+          const project = await one("projects", "id", id);
+          if (project) {
+            const classId = rowString(project, "class_id");
+            const isEnrolled = await db.from("class_students").select("student_id").eq("class_id", classId).eq("student_id", profile.id).maybeSingle();
+            if (isEnrolled.data) {
+              // Tự động tìm nhóm đầu tiên của dự án để học sinh xem được dự án
+              const firstGroup = await db.from("groups").select("id").eq("project_id", id).order("created_at", { ascending: true }).limit(1).maybeSingle();
+              if (firstGroup.data) {
+                await db.from("group_members").upsert({
+                  group_id: firstGroup.data.id,
+                  student_id: profile.id,
+                  project_id: id,
+                  class_id: classId,
+                }, { onConflict: "project_id,student_id" });
+                membershipData = await db.from("group_members").select("group_id,project_id,student_id").eq("student_id", profile.id).eq("project_id", id).maybeSingle();
+              }
+            }
+          }
+        }
+
+        if (!membershipData.data) return { ok: false, error: "Bạn chưa được xếp vào nhóm trong dự án này" };
+        const assignedGroupId = membershipData.data.group_id;
+
         const [project, group, tasksResult, taskStatusResult, members, rounds, eventsResult] = await Promise.all([
-          one("projects", "id", id), one("groups", "id", membership.data.group_id),
-          db.from("tasks").select("*").eq("group_id", membership.data.group_id).is("archived_at", null).order("position", { ascending: true }),
-          db.from("v_task_status").select("task_id,is_late").eq("group_id", membership.data.group_id).eq("is_valid", true),
-          filtered("v_group_members", "group_id", membership.data.group_id),
+          one("projects", "id", id), one("groups", "id", assignedGroupId),
+          db.from("tasks").select("*").eq("group_id", assignedGroupId).is("archived_at", null).order("position", { ascending: true }),
+          db.from("v_task_status").select("task_id,is_late").eq("group_id", assignedGroupId).eq("is_valid", true),
+          filtered("v_group_members", "group_id", assignedGroupId),
           filtered("evaluation_rounds", "project_id", id),
-          db.from("task_events").select("id,task_id,actor_id,event_type,occurred_at").eq("group_id", membership.data.group_id).order("occurred_at", { ascending: false }).limit(5),
+          db.from("task_events").select("id,task_id,actor_id,event_type,occurred_at").eq("group_id", assignedGroupId).order("occurred_at", { ascending: false }).limit(5),
         ]);
         if (tasksResult.error) throw tasksResult.error;
         if (taskStatusResult.error) throw taskStatusResult.error;
@@ -223,7 +267,7 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
           data: {
             project,
             group,
-            groupId: membership.data.group_id,
+            groupId: assignedGroupId,
             tasks: (tasksResult.data ?? []).map((task) => ({
               ...task,
               task_id: task.id,

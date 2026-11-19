@@ -1,8 +1,11 @@
 // [FE] Thanh điều hướng trên cùng · tài liệu mục 4.7
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import type { Role } from "@/shared/config/roles";
 import { signOut } from "@/server/actions/auth";
+import { useTheme } from "@/components/theme/theme-provider";
 
 export interface TopbarProps {
   role?: Role;
@@ -11,20 +14,24 @@ export interface TopbarProps {
 }
 
 export function Topbar({ role, userName = "Người dùng", onToggleMobileMenu }: TopbarProps) {
+  const { theme, toggleTheme } = useTheme();
+
   const roleLabel = {
     admin: "Quản trị viên",
     teacher: "Giáo viên",
     student: "Học sinh",
   }[role || "student"];
 
+  const profileHref = role === "student" ? "/student/profile" : "/change-password";
+
   return (
-    <header className="h-16 bg-white border-b border-gray-200 px-4 sm:px-6 flex items-center justify-between no-print sticky top-0 z-30">
+    <header className="h-16 bg-white border-b border-gray-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between no-print sticky top-0 z-30 transition-colors">
       <div className="flex items-center gap-3">
         {onToggleMobileMenu && (
           <button
             type="button"
             onClick={onToggleMobileMenu}
-            className="p-2 -ml-2 text-gray-600 hover:text-gray-900 md:hidden rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 -ml-2 text-gray-600 hover:text-gray-900 md:hidden rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
             aria-label="Mở danh mục điều hướng"
           >
             <svg
@@ -39,31 +46,72 @@ export function Topbar({ role, userName = "Người dùng", onToggleMobileMenu }
           </button>
         )}
         <Link href="/" className="flex items-center gap-2 group">
-          <span className="font-extrabold text-xl tracking-tight text-blue-600 group-hover:text-blue-700 transition-colors">
+          <span className="font-extrabold text-xl tracking-tight text-blue-600 group-hover:text-blue-700 transition-colors font-title">
             EDUHT
           </span>
-          <span className="text-[11px] font-medium text-gray-400 hidden sm:inline border-l border-gray-200 pl-2">
+          <span className="text-[11px] font-medium text-gray-400 hidden sm:inline border-l border-gray-200 dark:border-slate-700 pl-2">
             PBL Tin học
           </span>
         </Link>
-        <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-100">
+        <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 font-semibold border border-blue-100 dark:border-blue-900">
           {roleLabel}
         </span>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Nút chuyển đổi giao diện Sáng / Tối (Theme Toggle) */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          title={theme === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
+          aria-label="Đổi chế độ sáng tối"
+        >
+          {theme === "dark" ? (
+            <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+              />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+              />
+            </svg>
+          )}
+        </button>
+
+        {/* Nút tài khoản: Bấm vào avatar để vào xem hồ sơ và đổi mật khẩu */}
+        <Link
+          href={profileHref}
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group cursor-pointer"
+          title="Nhấn để xem Hồ sơ cá nhân & Đổi mật khẩu"
+        >
+          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 font-bold text-xs flex items-center justify-center ring-2 ring-transparent group-hover:ring-blue-400 transition-all">
             {userName.charAt(0).toUpperCase()}
           </div>
-          <span className="text-sm text-gray-700 font-medium hidden sm:inline max-w-[150px] truncate" title={userName}>
-            {userName}
-          </span>
-        </div>
+          <div className="hidden sm:flex flex-col text-left">
+            <span className="text-xs font-semibold text-gray-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors max-w-[130px] truncate">
+              {userName}
+            </span>
+            <span className="text-[10px] text-gray-400 dark:text-slate-500">
+              Hồ sơ & Mật khẩu
+            </span>
+          </div>
+        </Link>
+
+        {/* Nút đăng xuất */}
         <form action={signOut}>
           <button
             type="submit"
-            className="text-xs text-gray-600 hover:text-red-700 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium shadow-2xs"
+            className="text-xs text-gray-600 hover:text-red-700 bg-gray-50 hover:bg-red-50 dark:bg-slate-800 dark:hover:bg-red-950/40 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:border-red-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium shadow-2xs cursor-pointer"
             title="Đăng xuất khỏi hệ thống"
           >
             <span>Đăng xuất</span>

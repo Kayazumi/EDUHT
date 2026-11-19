@@ -82,7 +82,7 @@ Hệ thống hỗ trợ đăng nhập bằng **Tên đăng nhập (Username)** h
 | :--- | :--- | :--- | :--- |
 | **Quản trị viên (Admin)** | `admin`, `admin1`, `admin2`, `admin3` | `Abc_1111` | Toàn quyền cấu hình hệ thống, quản lý người dùng và dự án |
 | **Giáo viên (Teacher)** | `gv01` | `Abc_1111` | Quản lý lớp học, tạo tài khoản học sinh (thủ công / Excel), chấm điểm BARS, theo dõi Kanban |
-| **Học sinh (Student)** | `spt01` đến `spt30` (ví dụ: `spt01`, `spt02`,...) | `Abc_1111` | Thành viên lớp 10C4/12A1: thực hiện nhiệm vụ Kanban, đánh giá đồng đẳng (Peer review) |
+| **Học sinh (Student)** | `spt01` đến `spt60` | `Abc_1111` | • **Lớp 10C4:** `spt01` – `spt30`<br>• **Lớp 10C5:** `spt31` – `spt60`<br>Thực hiện nhiệm vụ Kanban, đánh giá đồng đẳng (Peer review) |
 
 > [!NOTE]
 > - **Tài khoản học sinh mới:** Khi giáo viên tạo học sinh mới (tạo từng bạn hoặc nhập danh sách hàng loạt từ file Excel/CSV), mật khẩu khởi tạo mặc định cho học sinh luôn là `Abc_1111`.

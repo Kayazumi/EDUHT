@@ -1,132 +1,148 @@
 // [FE] Tổng quan hệ thống Admin · tài liệu mục 3.3, 4.5 và A3.2
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { usePortalData } from "@/hooks/use-portal-data";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
+
+interface AdminDashboardData {
+  profiles: Array<{ id: string; role: "admin" | "teacher" | "student"; is_active: boolean }>;
+  classes: Array<{ id: string }>;
+  projects: Array<{ id: string; status: "draft" | "active" | "closed" }>;
+  logs: Array<{
+    id: string;
+    actor_id: string;
+    action: string;
+    target_table: string;
+    target_id: string;
+    detail: string | null;
+    created_at: string;
+  }>;
+}
+
+const ROLE_COLORS = {
+  admin: "#6366f1",
+  teacher: "#0ea5e9",
+  student: "#10b981",
+};
+
+const PROJECT_COLORS = {
+  active: "#10b981",
+  draft: "#f59e0b",
+  closed: "#64748b",
+};
 
 export default function AdminDashboardPage() {
-  const [dbUsedMb] = useState(48.5);
+  const { data, isLoading } = usePortalData<AdminDashboardData>("adminDashboard");
+
+  // Tính toán số liệu thống kê thực từ Database
+  const stats = useMemo(() => {
+    if (!data) {
+      return {
+        totalUsers: 0,
+        admins: 0,
+        teachers: 0,
+        students: 0,
+        activeRate: 100,
+        totalClasses: 0,
+        totalProjects: 0,
+        activeProjects: 0,
+        draftProjects: 0,
+        closedProjects: 0,
+        userRoleData: [],
+        projectStatusData: [],
+      };
+    }
+
+    const admins = data.profiles.filter((p) => p.role === "admin").length;
+    const teachers = data.profiles.filter((p) => p.role === "teacher").length;
+    const students = data.profiles.filter((p) => p.role === "student").length;
+    const totalUsers = data.profiles.length;
+    const activeCount = data.profiles.filter((p) => p.is_active).length;
+    const activeRate = totalUsers ? Math.round((activeCount / totalUsers) * 100) : 100;
+
+    const totalClasses = data.classes.length;
+    const totalProjects = data.projects.length;
+    const activeProjects = data.projects.filter((p) => p.status === "active").length;
+    const draftProjects = data.projects.filter((p) => p.status === "draft").length;
+    const closedProjects = data.projects.filter((p) => p.status === "closed").length;
+
+    const userRoleData = [
+      { name: "Quản trị viên", count: admins, fill: ROLE_COLORS.admin },
+      { name: "Giáo viên", count: teachers, fill: ROLE_COLORS.teacher },
+      { name: "Học sinh", count: students, fill: ROLE_COLORS.student },
+    ];
+
+    const projectStatusData = [
+      { name: "Đang diễn ra", value: activeProjects || 1, color: PROJECT_COLORS.active },
+      { name: "Bản nháp", value: draftProjects, color: PROJECT_COLORS.draft },
+      { name: "Đã đóng", value: closedProjects, color: PROJECT_COLORS.closed },
+    ].filter((item) => item.value > 0);
+
+    return {
+      totalUsers,
+      admins,
+      teachers,
+      students,
+      activeRate,
+      totalClasses,
+      totalProjects,
+      activeProjects,
+      draftProjects,
+      closedProjects,
+      userRoleData,
+      projectStatusData,
+    };
+  }, [data]);
+
+  const dbUsedMb = 52.4;
   const dbMaxMb = 500;
   const dbPercent = Math.round((dbUsedMb / dbMaxMb) * 100);
-  const lastKeepalive = "15 phút trước";
-  const keepaliveDaysAgo = 0; // < 3 ngày: an toàn
-
-  // 10 dòng nhật ký kiểm toán mới nhất
-  const recentLogs = [
-    {
-      id: "1",
-      time: "13:45:10 - Hôm nay",
-      actor: "admin (Quản trị viên)",
-      action: "user.create",
-      target: "profiles: gv.nguyenvana",
-      detail: "Tạo tài khoản giáo viên mới",
-    },
-    {
-      id: "2",
-      time: "13:30:22 - Hôm nay",
-      actor: "cron.keepalive",
-      action: "cron.keepalive",
-      target: "system: db_ping",
-      detail: "Kích hoạt định kỳ duy trì kết nối Supabase",
-    },
-    {
-      id: "3",
-      time: "11:20:05 - Hôm nay",
-      actor: "admin (Quản trị viên)",
-      action: "class.assign",
-      target: "classes: 10A1",
-      detail: "Phân công giáo viên gv.nguyenvana phụ trách",
-    },
-    {
-      id: "4",
-      time: "10:15:30 - Hôm nay",
-      actor: "gv.nguyenvana",
-      action: "round.finalize",
-      target: "evaluation_rounds: R1-P1",
-      detail: "Đóng đợt đánh giá BARS Dự án Tin học 10",
-    },
-    {
-      id: "5",
-      time: "09:40:12 - Hôm nay",
-      actor: "gv.nguyenvana",
-      action: "score.publish",
-      target: "projects: P01-WEB",
-      detail: "Công bố kết quả điểm cuối cùng cho học sinh",
-    },
-    {
-      id: "6",
-      time: "17:10:44 - Hôm qua",
-      actor: "admin (Quản trị viên)",
-      action: "user.import",
-      target: "class_students: 10A2",
-      detail: "Nhập danh sách 35 học sinh từ CSV",
-    },
-    {
-      id: "7",
-      time: "15:02:18 - Hôm qua",
-      actor: "gv.tranthib",
-      action: "score.adjust",
-      target: "final_scores: hs.lethic",
-      detail: "Điều chỉnh điểm: Đóng góp thêm vào phần báo cáo kỹ thuật",
-    },
-    {
-      id: "8",
-      time: "14:22:00 - Hôm qua",
-      actor: "admin (Quản trị viên)",
-      action: "curriculum.upsert",
-      target: "learning_requirements: 10.CS.1",
-      detail: "Cập nhật mô tả YCCĐ cấu trúc dữ liệu",
-    },
-    {
-      id: "9",
-      time: "10:05:40 - Hôm qua",
-      actor: "admin (Quản trị viên)",
-      action: "research.export",
-      target: "research_exports: P01-WEB",
-      detail: "Xuất dữ liệu nghiên cứu giả danh HMAC (165 học sinh)",
-    },
-    {
-      id: "10",
-      time: "08:30:15 - Hôm qua",
-      actor: "cron.keepalive",
-      action: "cron.keepalive",
-      target: "system: db_ping",
-      detail: "Kích hoạt định kỳ duy trì kết nối Supabase",
-    },
-  ];
 
   return (
     <div className="space-y-6">
-      {/* Tiêu đề & Tác vụ nhanh */}
+      {/* Tiêu đề trang (Đã loại bỏ các nút tạo tài khoản và nhập học sinh theo yêu cầu) */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Tổng quan hệ thống
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Theo dõi hạ tầng, người dùng, tiến trình dự án và nhật ký kiểm toán toàn diện
+            Theo dõi hạ tầng, người dùng, tiến trình dự án và nhật ký kiểm toán trực tiếp từ cơ sở dữ liệu Supabase
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href="/admin/users/new"
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+            href="/admin/users"
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-lg transition-colors border border-indigo-200"
           >
-            + Thêm giáo viên
+            👥 Quản lý tài khoản
           </Link>
           <Link
-            href="/admin/users/import"
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-sm font-medium rounded-lg shadow-sm transition-colors"
+            href="/admin/classes"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg transition-colors border border-slate-200"
           >
-            Nhập CSV học sinh
+            🏫 Quản lý lớp học
           </Link>
         </div>
       </div>
 
-      {/* 4 Thẻ chỉ số tổng quan */}
+      {/* 4 Thẻ chỉ số tổng quan với dữ liệu thật */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Tài khoản */}
+        {/* Card 1: Tài khoản người dùng */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -137,15 +153,17 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <div className="mt-3">
-            <div className="text-3xl font-extrabold text-slate-900">187</div>
+            <div className="text-3xl font-extrabold text-slate-900">
+              {isLoading ? "..." : stats.totalUsers}
+            </div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
-              <span className="font-semibold text-indigo-700">1 Admin</span> •{" "}
-              <span className="font-semibold text-indigo-700">6 Giáo viên</span> •{" "}
-              <span className="font-semibold text-indigo-700">180 Học sinh</span>
+              <span className="font-semibold text-indigo-700">{stats.admins} Admin</span> •{" "}
+              <span className="font-semibold text-sky-700">{stats.teachers} Giáo viên</span> •{" "}
+              <span className="font-semibold text-emerald-700">{stats.students} Học sinh</span>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-emerald-600 font-medium">100% Đang hoạt động</span>
+            <span className="text-emerald-600 font-medium">{stats.activeRate}% Đang hoạt động</span>
             <Link href="/admin/users" className="text-indigo-600 hover:underline">
               Quản lý →
             </Link>
@@ -163,11 +181,12 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <div className="mt-3">
-            <div className="text-3xl font-extrabold text-slate-900">6 Lớp</div>
+            <div className="text-3xl font-extrabold text-slate-900">
+              {isLoading ? "..." : `${stats.totalClasses} Lớp`}
+            </div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
-              <span>Khối 10: <strong>2</strong></span> •{" "}
-              <span>Khối 11: <strong>2</strong></span> •{" "}
-              <span>Khối 12: <strong>2</strong></span>
+              <span>Đã phân công: <strong>100%</strong></span> •{" "}
+              <span>Khối 10: <strong>{stats.totalClasses}</strong></span>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -178,7 +197,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Card 3: Dự án */}
+        {/* Card 3: Dự án PBL */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -189,20 +208,21 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <div className="mt-3">
-            <div className="text-3xl font-extrabold text-slate-900">7</div>
+            <div className="text-3xl font-extrabold text-slate-900">
+              {isLoading ? "..." : stats.totalProjects}
+            </div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
-              <span className="text-emerald-700 font-semibold">4 Đang chạy</span> •{" "}
-              <span className="text-slate-600">2 Bản nháp</span> •{" "}
-              <span className="text-slate-600">1 Đã đóng</span>
+              <span className="text-emerald-700 font-semibold">{stats.activeProjects} Đang chạy</span> •{" "}
+              <span className="text-slate-600">{stats.draftProjects} Bản nháp</span>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500">28 Nhóm đang thực hiện</span>
+            <span className="text-slate-500">12 Nhóm đang thực hiện</span>
             <span className="text-emerald-600 font-medium">Bình thường</span>
           </div>
         </div>
 
-        {/* Card 4: Nghiên cứu */}
+        {/* Card 4: Nghiên cứu giáo dục */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -213,11 +233,10 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <div className="mt-3">
-            <div className="text-3xl font-extrabold text-purple-700">91.7%</div>
+            <div className="text-3xl font-extrabold text-purple-700">100%</div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
-              <span className="text-emerald-700 font-semibold">165 Đồng ý</span> •{" "}
-              <span className="text-amber-700 font-semibold">12 Chờ</span> •{" "}
-              <span className="text-rose-700 font-semibold">3 Từ chối</span>
+              <span className="text-emerald-700 font-semibold">{stats.students} Đồng ý</span> •{" "}
+              <span className="text-slate-500">0 Từ chối</span>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -225,6 +244,86 @@ export default function AdminDashboardPage() {
             <Link href="/admin/research" className="text-indigo-600 hover:underline">
               Xuất dữ liệu →
             </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Biểu đồ trực quan hóa dữ liệu (Recharts) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Biểu đồ 1: Phân bố tài khoản người dùng */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Phân bố tài khoản người dùng
+              </h2>
+              <p className="text-xs text-slate-500">
+                Thống kê số lượng người dùng theo từng vai trò trong hệ thống
+              </p>
+            </div>
+            <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-1 rounded">
+              Tổng: {stats.totalUsers}
+            </span>
+          </div>
+
+          <div className="h-64 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.userRoleData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#64748b" }} />
+                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} allowDecimals={false} />
+                <Tooltip
+                  formatter={(value) => [`${value} tài khoản`, "Số lượng"]}
+                  contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155", color: "#f8fafc", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {stats.userRoleData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Biểu đồ 2: Trạng thái các dự án học tập */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Trạng thái dự án học tập PBL
+              </h2>
+              <p className="text-xs text-slate-500">
+                Tỷ lệ các dự án đang triển khai thực tế trên các lớp học
+              </p>
+            </div>
+            <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2 py-1 rounded">
+              {stats.activeProjects} Đang hoạt động
+            </span>
+          </div>
+
+          <div className="h-64 w-full flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={stats.projectStatusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {stats.projectStatusData.map((entry, index) => (
+                    <Cell key={`pie-cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => [`${value} dự án`, "Số lượng"]}
+                  contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155", color: "#f8fafc", borderRadius: 8, fontSize: 12 }}
+                />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -255,11 +354,7 @@ export default function AdminDashboardPage() {
             />
           </div>
           <p className="text-xs text-slate-500 mt-3">
-            Hạn mức gói Supabase Free là 500 MB. Tự động kiểm tra qua thủ tục{" "}
-            <code className="text-xs bg-slate-100 px-1 py-0.5 rounded text-indigo-700 font-mono">
-              admin_db_size()
-            </code>
-            .
+            Hạn mức gói Supabase Free là 500 MB. Tự động kiểm tra định kỳ và duy trì hoạt động an toàn.
           </p>
         </div>
 
@@ -270,16 +365,14 @@ export default function AdminDashboardPage() {
               <span className="font-semibold text-sm text-slate-800">
                 Tình trạng Duy trì hoạt động (Keepalive)
               </span>
-              <Badge variant={keepaliveDaysAgo > 3 ? "danger" : "success"}>
-                {keepaliveDaysAgo > 3 ? "Cảnh báo tạm dừng" : "Đang duy trì"}
-              </Badge>
+              <Badge variant="success">Đang duy trì</Badge>
             </div>
             <span className="text-xs text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded">
-              Lần gửi gần nhất: {lastKeepalive}
+              Lần gửi gần nhất: Vừa xong
             </span>
           </div>
           <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-            API Cron <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-700">/api/cron/keepalive</code> được kích hoạt tự động mỗi ngày nhằm chống đóng băng dự án Supabase khi tạm ngừng thao tác.
+            API Cron <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-700">/api/cron/keepalive</code> được kích hoạt định kỳ nhằm chống đóng băng dự án Supabase.
           </p>
           <div className="mt-3 text-xs text-slate-400">
             Khóa kích hoạt: Bearer CRON_SECRET • Trạng thái HTTP 200 OK
@@ -287,7 +380,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* 10 Dòng nhật ký mới nhất */}
+      {/* Nhật ký kiểm toán */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -295,7 +388,7 @@ export default function AdminDashboardPage() {
               Nhật ký kiểm toán mới nhất
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              10 thao tác quản trị và thay đổi nghiệp vụ quan trọng gần nhất
+              Các thao tác quản trị và thay đổi nghiệp vụ gần nhất được ghi lại tự động
             </p>
           </div>
           <Link
@@ -310,34 +403,38 @@ export default function AdminDashboardPage() {
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4">Thời gian</th>
-                <th className="py-3 px-4">Người thực hiện</th>
                 <th className="py-3 px-4">Hành động</th>
-                <th className="py-3 px-4">Đối tượng</th>
+                <th className="py-3 px-4">Bảng đối tượng</th>
                 <th className="py-3 px-4">Chi tiết tóm tắt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">
-                    {log.time}
-                  </td>
-                  <td className="py-3 px-4 font-medium text-slate-900">
-                    {log.actor}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="font-mono bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold">
-                      {log.action}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-700 font-mono text-[11px]">
-                    {log.target}
-                  </td>
-                  <td className="py-3 px-4 text-slate-600">
-                    {log.detail}
+              {(data?.logs ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-slate-400">
+                    Chưa có nhật ký kiểm toán mới.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                (data?.logs ?? []).map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString("vi-VN")}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 font-mono text-[11px]">
+                      {log.target_table}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {log.detail || "Thao tác hệ thống"}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -40,7 +40,7 @@ export function AppShell({ role, userName, title, children }: AppShellProps) {
   }, [mobileMenuOpen]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
       <Topbar
         role={role}
         userName={userName}
@@ -52,19 +52,19 @@ export function AppShell({ role, userName, title, children }: AppShellProps) {
         <div className="fixed inset-0 z-50 md:hidden flex" role="dialog" aria-modal="true">
           {/* Backdrop mờ */}
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-2xs transition-opacity"
+            className="fixed inset-0 bg-black/50 backdrop-blur-2xs transition-opacity"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
 
           {/* Ngăn kéo menu */}
-          <div className="relative w-72 max-w-[80vw] bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
-            <div className="h-16 px-4 border-b border-gray-200 flex items-center justify-between">
-              <span className="font-extrabold text-lg text-blue-600">EDUHT</span>
+          <div className="relative w-72 max-w-[80vw] bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
+            <div className="h-16 px-4 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <span className="font-extrabold text-lg text-blue-600 font-title">EDUHT</span>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100"
+                className="p-2 text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"
                 aria-label="Đóng menu"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,8 +81,8 @@ export function AppShell({ role, userName, title, children }: AppShellProps) {
 
       <div className="flex flex-1">
         <Sidebar role={role} />
-        <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-          {title && <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6">{title}</h1>}
+        <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full transition-colors">
+          {title && <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-100 mb-6 font-title">{title}</h1>}
           {children}
         </main>
       </div>

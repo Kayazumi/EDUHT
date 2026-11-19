@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createTeacher } from "@/server/actions/users";
 
 export default function NewUserPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function NewUserPage() {
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -33,12 +34,18 @@ export default function NewUserPage() {
 
     setSubmitting(true);
 
-    // Giả lập sinh mật khẩu ngẫu nhiên tạm thời (8 ký tự)
-    setTimeout(() => {
-      const generatedPass = "Pbl@" + Math.random().toString(36).substring(2, 8).toUpperCase();
-      setTempPassword(generatedPass);
+    try {
+      const result = await createTeacher({ username, full_name: fullName });
       setSubmitting(false);
-    }, 400);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setTempPassword(result.data.tempPassword || "Abc_1111");
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "Đã có lỗi xảy ra khi tạo tài khoản");
+    }
   };
 
   const handleCopy = () => {

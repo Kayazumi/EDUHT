@@ -149,56 +149,64 @@ export default function StudentDashboardPage() {
 
       {/* Dự án đang tham gia */}
       <section className="space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Dự án học tập đang tham gia</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activeProjects.map((project) => (
-            <div
-              key={project.id}
-              className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs space-y-4 hover:border-blue-300 transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-gray-900 text-base">{project.name}</h3>
-                  <div className="text-xs text-gray-500 mt-1">
-                    GVHD: <span className="text-gray-700 font-medium">{project.teacherName}</span>
+        <h2 className="text-base font-bold text-gray-900 font-title">Dự án học tập đang tham gia</h2>
+        {activeProjects.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center shadow-xs">
+            <span className="text-3xl block mb-2">📂</span>
+            <p className="text-sm font-semibold text-gray-800">Chưa có dự án nào đang mở</p>
+            <p className="text-xs text-gray-500 mt-1">Giáo viên phụ trách sẽ kích hoạt dự án học tập cho lớp của bạn trong thời gian tới.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeProjects.map((project) => (
+              <div
+                key={project.id}
+                className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs space-y-4 hover:border-blue-300 transition-colors"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-base">{project.name}</h3>
+                    <div className="text-xs text-gray-500 mt-1">
+                      GVHD: <span className="text-gray-700 font-medium">{project.teacherName}</span>
+                    </div>
+                  </div>
+                  <Badge variant="info">{project.groupName}</Badge>
+                </div>
+
+                {/* Tiến độ nhóm */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Tiến độ nhóm:</span>
+                    <span className="font-bold text-gray-900">
+                      {project.doneTasks}/{project.totalTasks} thẻ ({Math.round(project.completionRate * 100)}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${Math.round(project.completionRate * 100)}%` }}
+                    />
                   </div>
                 </div>
-                <Badge variant="info">{project.groupName}</Badge>
-              </div>
 
-              {/* Tiến độ nhóm */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-gray-600">
-                  <span>Tiến độ nhóm:</span>
-                  <span className="font-bold text-gray-900">
-                    {project.doneTasks}/{project.totalTasks} thẻ ({Math.round(project.completionRate * 100)}%)
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full"
-                    style={{ width: `${Math.round(project.completionRate * 100)}%` }}
-                  />
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                  <Link
+                    href={`/student/projects/${project.id}`}
+                    className="flex-1 px-3 py-1.5 text-center text-xs font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200"
+                  >
+                    Tổng quan dự án
+                  </Link>
+                  <Link
+                    href={`/student/projects/${project.id}/board`}
+                    className="flex-1 px-3 py-1.5 text-center text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs"
+                  >
+                    Bảng Kanban nhóm →
+                  </Link>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                <Link
-                  href={`/student/projects/${project.id}`}
-                  className="flex-1 px-3 py-1.5 text-center text-xs font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200"
-                >
-                  Tổng quan dự án
-                </Link>
-                <Link
-                  href={`/student/projects/${project.id}/board`}
-                  className="flex-1 px-3 py-1.5 text-center text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs"
-                >
-                  Bảng Kanban nhóm →
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Nhiệm vụ của tôi */}
