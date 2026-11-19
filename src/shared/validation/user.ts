@@ -19,8 +19,8 @@ export const schoolYearSchema = z
 export const studentCsvRowSchema = z.object({
   username: usernameSchema,
   full_name: fullNameSchema,
-  class_name: z.string().min(1, "Tên lớp không được để trống").max(30),
-  school_year: schoolYearSchema,
+  class_name: z.string().max(30).optional(),
+  school_year: schoolYearSchema.optional(),
 });
 
 export const createTeacherSchema = z.object({
@@ -32,4 +32,5 @@ export const createStudentSchema = z.object({
   username: usernameSchema,
   full_name: fullNameSchema,
   class_id: z.string().uuid("Mã lớp không hợp lệ"),
+  password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự").optional(),
 });

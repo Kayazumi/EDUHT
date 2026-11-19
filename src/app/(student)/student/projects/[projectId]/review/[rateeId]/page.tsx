@@ -4,15 +4,42 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PortalDataState } from "@/components/ui/portal-data-state";
+import { usePortalData } from "@/hooks/use-portal-data";
+import { saveDraftReview, submitReview } from "@/server/actions/reviews";
+
+type DataRow = Record<string, unknown>;
+
+interface ReviewFormData {
+  review: DataRow;
+  criteria: DataRow[];
+  levels: DataRow[];
+  answers: DataRow[];
+  ratee: DataRow | null;
+  round: DataRow | null;
+}
 
 interface BarsCriterionDisplay {
   id: string;
   name: string;
   description: string;
-  levels: {
-    level: number;
-    behaviorText: string; // Chỉ hiển thị mô tả hành vi, KHÔNG hiển thị điểm
-  }[];
+  levels: { level: number; behaviorText: string }[];
+}
+
+function readString(row: DataRow | null | undefined, key: string, fallback = "") {
+  const value = row?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNumber(row: DataRow, key: string) {
+  const value = row[key];
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Chưa có hạn" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 export default function StudentProjectReviewRateePage({
@@ -20,379 +47,237 @@ export default function StudentProjectReviewRateePage({
 }: {
   params: Promise<{ projectId: string; rateeId: string }>;
 }) {
-  const [resolvedParams, setResolvedParams] = useState({ projectId: "", rateeId: "" });
-  const [selectedLevels, setSelectedLevels] = useState<Record<string, number>>({});
-  const [comment, setComment] = useState("");
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isDraftSaved, setIsDraftSaved] = useState(false);
+  const { projectId, rateeId } = React.use(params);
+  const [userSelectedLevels, setUserSelectedLevels] = useState<Record<string, number>>({});
+  const [userComment, setUserComment] = useState<string | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
+  const [submittedOverride, setSubmittedOverride] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const { data, error, isLoading, refresh } = usePortalData<ReviewFormData>(
+    "studentReviewForm",
+    projectId,
+    rateeId
+  );
 
-  React.useEffect(() => {
-    params.then((p) => {
-      setResolvedParams(p);
-      // Giả lập nếu ratee là hs2 thì đã nộp trước đó
-      if (p.rateeId === "hs2") {
-        setSelectedLevels({ "crit-1": 3, "crit-2": 4, "crit-3": 3 });
-        setComment("Bạn Bình làm việc rất tích cực, hỗ trợ nhóm thu thập dữ liệu đúng hạn.");
-        setIsSubmitted(true);
-      }
-    });
-  }, [params]);
+  const initialLevels = React.useMemo(() => {
+    if (!data?.answers) return {};
+    const saved: Record<string, number> = {};
+    for (const answer of data.answers) {
+      saved[readString(answer, "criterion_id")] = readNumber(answer, "level");
+    }
+    return saved;
+  }, [data]);
 
-  // Thông tin bạn được chấm
-  const rateeInfo: Record<string, { name: string; username: string; role: string }> = {
-    hs2: { name: "Trần Thị Bình", username: "hs.binh02", role: "Thành viên nhóm" },
-    hs3: { name: "Lê Hoàng Cường", username: "hs.cuong03", role: "Thành viên nhóm" },
-  };
+  const selectedLevels = { ...initialLevels, ...userSelectedLevels };
+  const comment = userComment !== null ? userComment : (data ? readString(data.review, "comment") : "");
 
-  const currentRatee = rateeInfo[resolvedParams.rateeId] || {
-    name: "Bạn cùng nhóm",
-    username: resolvedParams.rateeId,
-    role: "Thành viên",
-  };
+  if (isLoading) {
+    return <PortalDataState label="phiếu đánh giá" />;
+  }
+  if (error) return <PortalDataState label="phiếu đánh giá" error={error} onRetry={refresh} />;
+  if (!data) return <PortalDataState label="phiếu đánh giá" error="Không tìm thấy phiếu đánh giá được giao cho bạn." onRetry={refresh} />;
 
-  // Bộ tiêu chí BARS chuẩn hóa (KHÔNG CÓ ĐIỂM SỐ theo A3.4)
-  const criteria: BarsCriterionDisplay[] = [
-    {
-      id: "crit-1",
-      name: "Đóng góp ý tưởng & giải pháp kỹ thuật",
-      description: "Mức độ tích cực thảo luận, đề xuất giải pháp công nghệ và thuật toán cho dự án.",
-      levels: [
-        {
-          level: 1,
-          behaviorText: "Mức 1: Hầu như không đóng góp ý kiến; thụ động chờ phân công mà không đề xuất sáng kiến.",
-        },
-        {
-          level: 2,
-          behaviorText: "Mức 2: Có đóng góp ý kiến khi được hỏi, nhưng ý tưởng còn rời rạc, chưa rõ tính khả thi.",
-        },
-        {
-          level: 3,
-          behaviorText: "Mức 3: Chủ động đưa ra các giải pháp kỹ thuật phù hợp với yêu cầu cần đạt của bài học.",
-        },
-        {
-          level: 4,
-          behaviorText: "Mức 4: Đưa ra các ý tưởng sáng tạo, dẫn dắt nhóm vượt qua các bài toán kỹ thuật phức tạp.",
-        },
-      ],
-    },
-    {
-      id: "crit-2",
-      name: "Trách nhiệm & Hoàn thành công việc đúng hạn",
-      description: "Thực hiện các thẻ Kanban được phân công, cam kết chất lượng sản phẩm.",
-      levels: [
-        {
-          level: 1,
-          behaviorText: "Mức 1: Thường xuyên trễ hạn các thẻ được giao, chất lượng sơ sài làm ảnh hưởng tiến độ chung.",
-        },
-        {
-          level: 2,
-          behaviorText: "Mức 2: Hoàn thành nhiệm vụ nhưng cần bạn cùng nhóm nhắc nhở nhiều lần hoặc sản phẩm còn lỗi.",
-        },
-        {
-          level: 3,
-          behaviorText: "Mức 3: Tự giác nhận việc trên bảng Kanban, hoàn thành đúng hạn với chất lượng tốt.",
-        },
-        {
-          level: 4,
-          behaviorText: "Mức 4: Luôn hoàn thành trước hạn chót, chủ động giúp đỡ bạn khác gỡ vướng nhiệm vụ trễ.",
-        },
-      ],
-    },
-    {
-      id: "crit-3",
-      name: "Kỹ năng hợp tác & Làm việc nhóm",
-      description: "Giao tiếp, lắng nghe tích cực và phối hợp nhịp nhàng với các thành viên khác.",
-      levels: [
-        {
-          level: 1,
-          behaviorText: "Mức 1: Giao tiếp thiếu xây dựng, không tham gia các buổi họp hoặc gây cản trở công việc.",
-        },
-        {
-          level: 2,
-          behaviorText: "Mức 2: Có mặt trong các buổi trao đổi nhưng ít tương tác, chia sẻ tài liệu hạn chế.",
-        },
-        {
-          level: 3,
-          behaviorText: "Mức 3: Lắng nghe tôn trọng, phản hồi mang tính đóng góp, phối hợp ăn ý với các bạn.",
-        },
-        {
-          level: 4,
-          behaviorText: "Mức 4: Gắn kết tinh thần đồng đội, hòa giải bất đồng và động viên bạn bè cùng tiến bộ.",
-        },
-      ],
-    },
-  ];
+  const criteria: BarsCriterionDisplay[] = data.criteria.map((criterion) => ({
+    id: readString(criterion, "id"),
+    name: readString(criterion, "title", "Tiêu chí đánh giá"),
+    description: readString(criterion, "description"),
+    levels: data.levels
+      .filter((level) => readString(level, "criterion_id") === readString(criterion, "id"))
+      .sort((a, b) => readNumber(a, "level") - readNumber(b, "level"))
+      .map((level) => ({ level: readNumber(level, "level"), behaviorText: readString(level, "behavior_text") })),
+  }));
+  const rateeName = readString(data.ratee, "full_name", "Thành viên nhóm");
+  const roundId = readString(data.review, "round_id");
+  const submittedAt = readString(data.review, "submitted_at");
+  const isSubmitted = Boolean(submittedAt) || submittedOverride;
 
-  // Kiểm tra không chấm chính mình (INV rule)
-  const isSelf = resolvedParams.rateeId === "hs1";
-
-  const handleSelectLevel = (critId: string, level: number) => {
-    if (isSubmitted) return;
-    setSelectedLevels((prev) => ({ ...prev, [critId]: level }));
+  const handleSelectLevel = (criterionId: string, level: number) => {
+    if (isSubmitted || isSaving) return;
+    setUserSelectedLevels((previous) => ({ ...previous, [criterionId]: level }));
     setIsDraftSaved(false);
     setErrorMessage(null);
   };
 
-  const handleSaveDraft = () => {
-    setIsDraftSaved(true);
+  const reviewInput = () => ({
+    roundId,
+    rateeId,
+    answers: Object.entries(selectedLevels).map(([criterionId, level]) => ({ criterionId, level })),
+    comment,
+  });
+
+  const handleSaveDraft = async () => {
+    if (!Object.keys(selectedLevels).length) {
+      setErrorMessage("Hãy chọn ít nhất một mức hành vi trước khi lưu nháp.");
+      return;
+    }
+    setIsSaving(true);
     setErrorMessage(null);
+    const result = await saveDraftReview(reviewInput());
+    setIsSaving(false);
+    if (!result.ok) {
+      setErrorMessage(result.error);
+      return;
+    }
+    setUserSelectedLevels({});
+    setUserComment(null);
+    setIsDraftSaved(true);
+    refresh();
   };
 
   const handleOpenSubmitModal = () => {
     setErrorMessage(null);
-
-    // Kiểm tra đã chọn đủ tất cả tiêu chí chưa
-    for (const c of criteria) {
-      if (!selectedLevels[c.id]) {
-        setErrorMessage(`Vui lòng chọn mức hành vi cho tiêu chí "${c.name}".`);
-        return;
-      }
-    }
-
-    // Quy tắc D5: Bắt buộc nhận xét khi chọn Mức 1 (mức thấp nhất)
-    const hasLevel1 = Object.values(selectedLevels).some((lvl) => lvl === 1);
-    if (hasLevel1 && comment.trim().length < 10) {
-      setErrorMessage("Bạn đã chọn Mức 1 cho ít nhất một tiêu chí. Quy tắc yêu cầu bạn ghi nhận xét giải thích cụ thể (tối thiểu 10 ký tự).");
+    const missing = criteria.find((criterion) => !selectedLevels[criterion.id]);
+    if (missing) {
+      setErrorMessage(`Vui lòng chọn mức hành vi cho tiêu chí “${missing.name}”.`);
       return;
     }
-
+    const hasLevel1 = Object.values(selectedLevels).some((level) => level === 1);
+    if (hasLevel1 && comment.trim().length < 10) {
+      setErrorMessage("Khi chọn Mức 1, hãy ghi nhận xét giải thích cụ thể (tối thiểu 10 ký tự).");
+      return;
+    }
     setShowSubmitModal(true);
   };
 
-  const handleConfirmSubmit = () => {
-    setIsSubmitted(true);
-    setShowSubmitModal(false);
+  const handleConfirmSubmit = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    const result = await submitReview(reviewInput());
+    setIsSaving(false);
+    if (!result.ok) {
+      setErrorMessage(result.error);
+      setShowSubmitModal(false);
+      return;
+    }
+    setSubmittedOverride(true);
     setIsDraftSaved(false);
+    setShowSubmitModal(false);
+    setUserSelectedLevels({});
+    setUserComment(null);
+    refresh();
   };
-
-  if (isSelf) {
-    return (
-      <main className="p-6 max-w-2xl mx-auto space-y-4">
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">
-          ⚠️ Bạn không thể tự đánh giá chính mình. Vui lòng quay lại danh sách để chấm các bạn cùng nhóm.
-        </div>
-        <Link
-          href={`/student/projects/${resolvedParams.projectId}/review`}
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg text-xs"
-        >
-          ← Quay lại danh sách
-        </Link>
-      </main>
-    );
-  }
 
   return (
     <div className="space-y-6 max-w-4xl pb-10">
-      {/* Breadcrumb & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-200 pb-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
             <Link href="/student" className="hover:text-blue-600">Việc của tôi</Link>
             <span>/</span>
-            <Link href={`/student/projects/${resolvedParams.projectId}`} className="hover:text-blue-600">
-              {resolvedParams.projectId || "Dự án"}
-            </Link>
+            <Link href={`/student/projects/${projectId}`} className="hover:text-blue-600">Dự án</Link>
             <span>/</span>
-            <Link href={`/student/projects/${resolvedParams.projectId}/review`} className="hover:text-blue-600">
-              Đánh giá đồng đẳng
-            </Link>
+            <Link href={`/student/projects/${projectId}/review`} className="hover:text-blue-600">Đánh giá đồng đẳng</Link>
             <span>/</span>
             <span className="text-gray-900 font-medium">Phiếu chấm</span>
           </div>
-
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Chấm bạn: {currentRatee.name}
-            </h1>
-            {isSubmitted ? (
-              <Badge variant="success">Đã nộp phiếu (Chỉ xem)</Badge>
-            ) : (
-              <Badge variant="warning">Đang thực hiện</Badge>
-            )}
+            <h1 className="text-2xl font-bold text-gray-900">Chấm bạn: {rateeName}</h1>
+            {isSubmitted ? <Badge variant="success">Đã nộp · Chỉ xem</Badge> : <Badge variant="warning">Đang thực hiện</Badge>}
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Tài khoản: <strong className="text-gray-700 font-mono">@{currentRatee.username}</strong> · Vai trò: {currentRatee.role}
-          </p>
+          <p className="text-xs text-gray-500 mt-1">Đợt đánh giá: {readString(data.round, "title", "Đánh giá đồng đẳng")}</p>
         </div>
-
-        <div className="text-right">
-          <div className="text-xs text-gray-500">Đóng đợt sau:</div>
-          <div className="text-sm font-bold font-mono text-blue-600">2 ngày 04:10</div>
+        <div className="text-left sm:text-right">
+          <div className="text-xs text-gray-500">Hạn đóng đợt:</div>
+          <div className="text-sm font-bold text-blue-700">{formatDate(readString(data.round, "closes_at"))}</div>
         </div>
       </div>
 
-      {isDraftSaved && (
-        <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-lg flex items-center justify-between">
-          <span>✓ Đã lưu bản nháp thành công! Bạn có thể quay lại hoàn thành sau.</span>
-          <button onClick={() => setIsDraftSaved(false)} className="font-bold">✕</button>
-        </div>
-      )}
+      {isDraftSaved && <div role="status" className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-lg">Đã lưu bản nháp vào hệ thống.</div>}
+      {errorMessage && <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg">{errorMessage}</div>}
+      {isSubmitted && <div role="status" className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl">Phiếu đã nộp{submittedAt ? ` lúc ${formatDate(submittedAt)}` : ""} và đang ở chế độ chỉ xem.</div>}
 
-      {errorMessage && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg flex items-center justify-between">
-          <span>⚠️ {errorMessage}</span>
-          <button onClick={() => setErrorMessage(null)} className="font-bold">✕</button>
+      <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 flex items-start gap-3">
+        <span className="text-base">🔒</span>
+        <div className="text-xs text-sky-900 leading-relaxed">
+          <span className="font-bold">Quyền riêng tư đánh giá đồng đẳng:</span> Điểm số và nhận xét của bạn được bảo mật danh tính đối với các thành viên trong lớp và trong nhóm ({rateeName} sẽ không biết mức đánh giá của bạn). Chỉ giáo viên bộ môn mới có thể xem chi tiết người đánh giá để phục vụ công tác hướng dẫn và ghi nhận điểm quá trình.
         </div>
-      )}
-
-      {isSubmitted && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-          <span>✓</span>
-          <span>Phiếu đánh giá đã được nộp thành công và chuyển sang chế độ chỉ đọc. Cảm ơn sự đóng góp của bạn!</span>
-        </div>
-      )}
-
-      {/* Banner lưu ý bảo mật BARS */}
-      <div className="p-3 bg-slate-100 rounded-lg text-[11px] text-slate-600 flex items-center justify-between">
-        <span>
-          📌 <em>Không có điểm số ở bất kỳ bước nào. Chọn mức hành vi phản ánh đúng nhất những gì bạn quan sát được.</em>
-        </span>
-        <span className="font-semibold text-slate-700">
-          Đã chọn: {Object.keys(selectedLevels).length} / {criteria.length} tiêu chí
-        </span>
       </div>
 
-      {/* Danh sách tiêu chí BARS */}
-      <div className="space-y-6">
-        {criteria.map((crit, index) => {
-          const selected = selectedLevels[crit.id];
+      <div className="p-3 bg-slate-100 rounded-lg text-[11px] text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <span><em>Không hiển thị điểm số. Chọn mức hành vi phản ánh đúng điều bạn quan sát được.</em></span>
+        <span className="font-semibold text-slate-700">Đã chọn: {Object.keys(selectedLevels).length}/{criteria.length} tiêu chí</span>
+      </div>
 
-          return (
-            <div
-              key={crit.id}
-              className={`bg-white border rounded-xl p-5 shadow-xs space-y-3 transition-colors ${
-                selected ? "border-blue-300 ring-1 ring-blue-100" : "border-gray-200"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider mr-2">
-                    Tiêu chí {index + 1}/{criteria.length}
+      {criteria.length === 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Đợt đánh giá chưa có tiêu chí BARS.</div>
+      ) : criteria.map((criterion, index) => (
+        <fieldset key={criterion.id} className={`bg-white border rounded-xl p-5 shadow-xs space-y-3 ${selectedLevels[criterion.id] ? "border-blue-300 ring-1 ring-blue-100" : "border-gray-200"}`}>
+          <legend className="sr-only">{criterion.name}</legend>
+          <div>
+            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider mr-2">Tiêu chí {index + 1}/{criteria.length}</span>
+            <h2 className="text-base font-bold text-gray-900 inline">{criterion.name}</h2>
+            {criterion.description && <p className="text-xs text-gray-500 mt-0.5">{criterion.description}</p>}
+          </div>
+          <div className="space-y-2">
+            {criterion.levels.map((level) => {
+              const checked = selectedLevels[criterion.id] === level.level;
+              return (
+                <label key={level.level} className={`block p-3 rounded-lg border text-xs cursor-pointer ${checked ? "bg-blue-50/80 border-blue-500 text-blue-950 font-medium" : "bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-100/70"} ${isSubmitted ? "cursor-default opacity-85" : ""}`}>
+                  <span className="flex items-start gap-2.5">
+                    <input type="radio" name={`criterion-${criterion.id}`} checked={checked} disabled={isSubmitted || isSaving} onChange={() => handleSelectLevel(criterion.id, level.level)} className="mt-0.5 text-blue-600 focus:ring-blue-500" />
+                    <span className="leading-relaxed">{level.behaviorText}</span>
                   </span>
-                  <h3 className="text-base font-bold text-gray-900 inline">{crit.name}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{crit.description}</p>
-                </div>
-                {selected && (
-                  <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                    Đã chọn Mức {selected}
-                  </span>
-                )}
-              </div>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      ))}
 
-              {/* 4 Mức mô tả hành vi */}
-              <div className="space-y-2 pt-1">
-                {crit.levels.map((lvl) => {
-                  const isChecked = selected === lvl.level;
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs space-y-2">
+        <label htmlFor="review-comment" className="block text-sm font-bold text-gray-900">Nhận xét góp ý cho bạn</label>
+        <p className="text-xs text-gray-500">Bắt buộc khi có tiêu chí ở Mức 1; tối thiểu 10 ký tự.</p>
+        <textarea id="review-comment" rows={3} disabled={isSubmitted || isSaving} value={comment} onChange={(event) => setUserComment(event.target.value)} className="w-full p-3 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
+      </div>
 
+      {!isSubmitted && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3">
+          <Link href={`/student/projects/${projectId}/review`} className="text-xs text-gray-600 hover:underline">← Quay lại danh sách bạn</Link>
+          <div className="flex items-center gap-3">
+            <button type="button" disabled={isSaving} onClick={handleSaveDraft} className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg disabled:opacity-50">{isSaving ? "Đang lưu…" : "Lưu nháp"}</button>
+            <button type="button" disabled={isSaving} onClick={handleOpenSubmitModal} className="px-6 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">Nộp phiếu đánh giá</button>
+          </div>
+        </div>
+      )}
+
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="confirm-review-title" className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h2 id="confirm-review-title" className="text-base font-bold text-gray-900">Xác nhận nộp phiếu đánh giá</h2>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+              <span className="text-sm">⚠️</span>
+              <div>Sau khi nộp, phiếu đánh giá sẽ được ghi nhận chính thức và <strong>không thể chỉnh sửa lại</strong>.</div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700">Rà soát mức bạn đã chọn cho <strong>{rateeName}</strong>:</p>
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-1 border border-gray-200 rounded-lg p-2.5 bg-gray-50">
+                {criteria.map((c, idx) => {
+                  const lvl = selectedLevels[c.id];
+                  const lvlObj = c.levels.find((l) => l.level === lvl);
                   return (
-                    <label
-                      key={lvl.level}
-                      onClick={() => handleSelectLevel(crit.id, lvl.level)}
-                      className={`block p-3 rounded-lg border text-xs cursor-pointer transition-all ${
-                        isChecked
-                          ? "bg-blue-50/80 border-blue-500 text-blue-950 font-medium shadow-2xs"
-                          : "bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-100/70"
-                      } ${isSubmitted ? "cursor-default opacity-85" : ""}`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <input
-                          type="radio"
-                          name={`crit-${crit.id}`}
-                          checked={isChecked}
-                          disabled={isSubmitted}
-                          onChange={() => handleSelectLevel(crit.id, lvl.level)}
-                          className="mt-0.5 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="leading-relaxed">{lvl.behaviorText}</span>
+                    <div key={c.id} className="text-xs bg-white p-2.5 rounded-md border border-gray-200">
+                      <span className="font-bold text-gray-800">{idx + 1}. {c.name}</span>
+                      <div className="text-blue-700 font-semibold mt-0.5">
+                        Mức {lvl}: {lvlObj?.behaviorText || `Mức ${lvl}`}
                       </div>
-                    </label>
+                    </div>
                   );
                 })}
+                {comment && (
+                  <div className="text-xs bg-white p-2.5 rounded-md border border-gray-200">
+                    <span className="font-bold text-gray-800">Nhận xét góp ý:</span>
+                    <p className="text-gray-600 italic mt-0.5">“{comment}”</p>
+                  </div>
+                )}
               </div>
             </div>
-          );
-        })}
 
-        {/* Ô Nhận xét */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs space-y-2">
-          <label className="block text-sm font-bold text-gray-900">
-            Nhận xét góp ý cho bạn (không bắt buộc, trừ khi chọn Mức 1)
-          </label>
-          <p className="text-xs text-gray-500">
-            Hãy đưa ra những nhận xét chân thành, mang tính xây dựng nhằm giúp bạn phát triển kỹ năng làm việc nhóm.
-          </p>
-          <textarea
-            rows={3}
-            disabled={isSubmitted}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Ví dụ: Bạn hợp tác rất tốt, luôn chủ động chia sẻ tài liệu; nếu bạn chủ động phát biểu trong buổi họp nhóm nữa thì tuyệt vời..."
-            className="w-full p-3 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-          />
-        </div>
-
-        {/* Action buttons */}
-        {!isSubmitted && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3">
-            <Link
-              href={`/student/projects/${resolvedParams.projectId}/review`}
-              className="text-xs text-gray-600 hover:underline text-center sm:text-left"
-            >
-              ← Quay lại danh sách bạn
-            </Link>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="flex-1 sm:flex-none px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-2xs"
-              >
-                Lưu nháp
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenSubmitModal}
-                className="flex-1 sm:flex-none px-6 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs"
-              >
-                Nộp phiếu đánh giá
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Modal xác nhận nộp phiếu */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Xác nhận nộp phiếu đánh giá</h3>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
-              <p className="font-bold">Lưu ý quan trọng (tài liệu A3.4):</p>
-              <p>
-                Sau khi nộp, phiếu đánh giá sẽ được ghi nhận vào hệ thống và <strong>không thể chỉnh sửa lại</strong>.
-              </p>
-            </div>
-            <p className="text-xs text-gray-600">
-              Bạn có chắc chắn muốn nộp phiếu đánh giá cho bạn <strong>{currentRatee.name}</strong>?
-            </p>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowSubmitModal(false)}
-                className="px-4 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Kiểm tra lại
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSubmit}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
-              >
-                Đồng ý nộp phiếu
-              </button>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button type="button" disabled={isSaving} onClick={() => setShowSubmitModal(false)} className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Kiểm tra lại</button>
+              <button type="button" disabled={isSaving} onClick={handleConfirmSubmit} className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors disabled:opacity-50">{isSaving ? "Đang nộp…" : "Đồng ý nộp phiếu"}</button>
             </div>
           </div>
         </div>

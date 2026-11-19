@@ -4,14 +4,36 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PortalDataState } from "@/components/ui/portal-data-state";
+import { usePortalData } from "@/hooks/use-portal-data";
 
-interface GroupMember {
-  id: string;
-  name: string;
-  username: string;
-  isLeader: boolean;
-  activeTasksCount: number;
-  currentTaskTitle: string;
+type DataRow = Record<string, unknown>;
+
+interface StudentProjectData {
+  project: DataRow | null;
+  group: DataRow | null;
+  groupId: string;
+  tasks: DataRow[];
+  members: DataRow[];
+  rounds: DataRow[];
+  events: DataRow[];
+}
+
+function readString(row: DataRow | null | undefined, key: string, fallback = "") {
+  const value = row?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNumber(row: DataRow | null | undefined, key: string, fallback = 0) {
+  const value = row?.[key];
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatDate(value: string) {
+  if (!value) return "Chưa có ngày";
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? "Chưa có ngày" : new Intl.DateTimeFormat("vi-VN").format(date);
 }
 
 export default function StudentProjectDetailPage({
@@ -20,52 +42,32 @@ export default function StudentProjectDetailPage({
   params: Promise<{ projectId: string }>;
 }) {
   const [resolvedId, setResolvedId] = useState("");
+  const { data, error, isLoading, refresh } = usePortalData<StudentProjectData>("studentProject", resolvedId);
 
   React.useEffect(() => {
     params.then((p) => setResolvedId(p.projectId));
   }, [params]);
 
-  const [project] = useState({
-    id: "p01",
-    name: "Dự án Tin học 12: Xây dựng Hệ thống Trợ lý AI và Chatbot",
-    description:
-      "Dự án học tập thực hành tích hợp các chủ đề về Trí tuệ nhân tạo (AI), Xử lý ngôn ngữ tự nhiên (NLP) và xây dựng giao diện ứng dụng web môn Tin học 12 theo Chương trình GDPT 2018.",
-    teacherName: "ThS. Hoàng Thị Lan",
-    startDate: "15/10/2026",
-    endDate: "30/11/2026",
-    status: "Đang diễn ra (Active)",
-    weightA: 0.6, // Điểm nhóm
-    weightB: 0.4, // Điểm BARS
-    groupName: "Nhóm 01 - AI Chatbot",
-    groupGoal: "Hoàn thành hệ thống chatbot giải đáp thắc mắc môn Tin học với giao diện trực quan.",
-  });
+  if (!resolvedId || isLoading) return <PortalDataState label="thông tin dự án" />;
+  if (error) return <PortalDataState label="thông tin dự án" error={error} onRetry={refresh} />;
+  if (!data?.project || !data.group) {
+    return <PortalDataState label="thông tin nhóm trong dự án" error="Không tìm thấy dự án hoặc nhóm của bạn." onRetry={refresh} />;
+  }
 
-  const [members] = useState<GroupMember[]>([
-    {
-      id: "hs1",
-      name: "Nguyễn Văn An",
-      username: "hs.an01",
-      isLeader: true,
-      activeTasksCount: 2,
-      currentTaskTitle: "Thiết kế kiến trúc hệ thống Chatbot",
-    },
-    {
-      id: "hs2",
-      name: "Trần Thị Bình",
-      username: "hs.binh02",
-      isLeader: false,
-      activeTasksCount: 1,
-      currentTaskTitle: "Thu thập tập dữ liệu câu hỏi ôn tập",
-    },
-    {
-      id: "hs3",
-      name: "Lê Hoàng Cường",
-      username: "hs.cuong03",
-      isLeader: false,
-      activeTasksCount: 1,
-      currentTaskTitle: "Dựng slide báo cáo & quay demo",
-    },
-  ]);
+  const project = data.project;
+  const projectId = readString(project, "id", resolvedId);
+  const projectStatus = readString(project, "status");
+  const statusLabel = projectStatus === "active" ? "Đang diễn ra" : projectStatus === "closed" ? "Đã kết thúc" : "Bản nháp";
+  const members = data.members.map((member) => {
+    const id = readString(member, "student_id");
+    const memberTasks = data.tasks.filter((task) => task.assignee_id === id && task.status === "doing");
+    return {
+      id,
+      name: readString(member, "full_name", "Học sinh"),
+      activeTasksCount: memberTasks.length,
+      currentTaskTitle: readString(memberTasks[0], "title", "Chưa có nhiệm vụ đang làm"),
+    };
+  });
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -78,19 +80,19 @@ export default function StudentProjectDetailPage({
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{readString(project, "title", "Dự án")}</h1>
             <p className="text-xs text-gray-500 mt-1">
-              GV hướng dẫn: <strong className="text-gray-700">{project.teacherName}</strong> · Thời gian: {project.startDate} đến {project.endDate}
+              Thời gian: {formatDate(readString(project, "starts_on"))} đến {formatDate(readString(project, "due_on"))}
             </p>
           </div>
-          <Badge variant="success">{project.status}</Badge>
+          <Badge variant={projectStatus === "active" ? "success" : "default"}>{statusLabel}</Badge>
         </div>
       </div>
 
       {/* 3 Lối tắt hành động nổi bật */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
-          href={`/student/projects/${resolvedId || project.id}/board`}
+          href={`/student/projects/${projectId}/board`}
           className="p-5 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
         >
           <div>
@@ -106,7 +108,7 @@ export default function StudentProjectDetailPage({
         </Link>
 
         <Link
-          href={`/student/projects/${resolvedId || project.id}/review`}
+          href={`/student/projects/${projectId}/review`}
           className="p-5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
         >
           <div>
@@ -122,7 +124,7 @@ export default function StudentProjectDetailPage({
         </Link>
 
         <Link
-          href={`/student/projects/${resolvedId || project.id}/results`}
+          href={`/student/projects/${projectId}/results`}
           className="p-5 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-xl shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
         >
           <div>
@@ -143,7 +145,7 @@ export default function StudentProjectDetailPage({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <span className="text-xs font-semibold uppercase text-blue-600">Nhóm học tập của tôi</span>
-            <h2 className="text-lg font-bold text-gray-900">{project.groupName}</h2>
+            <h2 className="text-lg font-bold text-gray-900">{readString(data.group, "name", "Nhóm")}</h2>
           </div>
           <div className="text-xs text-gray-500">
             {members.length} thành viên
@@ -158,17 +160,8 @@ export default function StudentProjectDetailPage({
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-gray-900 text-sm">{member.name}</span>
-                {member.isLeader ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                    Trưởng nhóm
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] text-gray-600 bg-gray-100">
-                    Thành viên
-                  </span>
-                )}
+                <span className="px-2 py-0.5 rounded-full text-[10px] text-gray-600 bg-gray-100">Thành viên</span>
               </div>
-              <div className="text-xs text-gray-400 font-mono">@{member.username}</div>
               <div className="pt-2 border-t border-gray-100 text-xs text-gray-600 space-y-1">
                 <div>Đang làm: <strong className="text-gray-900">{member.activeTasksCount} thẻ</strong></div>
                 <div className="text-[11px] text-gray-500 truncate" title={member.currentTaskTitle}>
@@ -191,7 +184,7 @@ export default function StudentProjectDetailPage({
           <div className="p-4 border border-blue-100 bg-blue-50/60 rounded-xl space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-blue-900 uppercase">Trọng số Điểm nhóm (a)</span>
-              <span className="text-xl font-black text-blue-700">{Math.round(project.weightA * 100)}%</span>
+              <span className="text-xl font-black text-blue-700">{Math.round(readNumber(project, "weight_group") * 100)}%</span>
             </div>
             <p className="text-xs text-blue-800">
               Điểm do giáo viên chấm dựa trên chất lượng sản phẩm chung, báo cáo và buổi thuyết trình của nhóm.
@@ -201,7 +194,7 @@ export default function StudentProjectDetailPage({
           <div className="p-4 border border-purple-100 bg-purple-50/60 rounded-xl space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-purple-900 uppercase">Trọng số Điểm đồng đẳng BARS (b)</span>
-              <span className="text-xl font-black text-purple-700">{Math.round(project.weightB * 100)}%</span>
+              <span className="text-xl font-black text-purple-700">{Math.round(readNumber(project, "weight_peer") * 100)}%</span>
             </div>
             <p className="text-xs text-purple-800">
               Điểm tổng hợp từ đánh giá của các thành viên trong nhóm theo thang đo mỏ neo hành vi (BARS).

@@ -1,21 +1,35 @@
-// [FE] Lớp của tôi, học sinh · tài liệu mục 3.3, 4.5 và A3.3
+// [FE] Lớp của tôi, quản lý học sinh và tài khoản · tài liệu mục 3.3, 4.5 và A3.3
 "use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PortalDataState } from "@/components/ui/portal-data-state";
+import { usePortalData } from "@/hooks/use-portal-data";
+import {
+  createStudent,
+  resetStudentPassword,
+  resetClassStudentsPassword,
+} from "@/server/actions/users";
+import { DEFAULT_STUDENT_PASSWORD } from "@/shared/config/defaults";
 
-interface StudentRow {
-  id: string;
-  username: string;
-  fullName: string;
-  groupName: string;
-  consentStatus: "granted" | "pending" | "declined";
-  consentedBy?: "student" | "guardian" | "both";
+type DataRow = Record<string, unknown>;
+
+interface TeacherClassData {
+  class: DataRow | null;
+  students: DataRow[];
+  projects: DataRow[];
 }
 
-function createTempPassword(username: string): string {
-  return `Hs@${username.replace(/[^a-zA-Z0-9]/g, "")}99`;
+function readString(row: DataRow | null | undefined, key: string, fallback = "") {
+  const value = row?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNumber(row: DataRow | null | undefined, key: string, fallback = 0) {
+  const value = row?.[key];
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export default function TeacherClassDetailPage({
@@ -24,93 +38,132 @@ export default function TeacherClassDetailPage({
   params: Promise<{ classId: string }>;
 }) {
   const [resolvedClassId, setResolvedClassId] = useState("");
-  const [tempPasswordModal, setTempPasswordModal] = useState<{
+  const { data, error, isLoading, refresh } = usePortalData<TeacherClassData>(
+    "teacherClass",
+    resolvedClassId
+  );
+
+  // State cho Modal tạo thủ công 1 học sinh
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newStudentFullName, setNewStudentFullName] = useState("");
+  const [newStudentUsername, setNewStudentUsername] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createdStudentInfo, setCreatedStudentInfo] = useState<{
     username: string;
-    pass: string;
+    fullName: string;
+    password: string;
   } | null>(null);
 
-  const [students, setStudents] = useState<StudentRow[]>([
-    {
-      id: "s-1",
-      username: "hs.mau01",
-      fullName: "Học Sinh Mẫu 1",
-      groupName: "Nhóm 01",
-      consentStatus: "granted",
-      consentedBy: "both",
-    },
-    {
-      id: "s-2",
-      username: "hs.mau02",
-      fullName: "Học Sinh Mẫu 2",
-      groupName: "Nhóm 01",
-      consentStatus: "granted",
-      consentedBy: "student",
-    },
-    {
-      id: "s-3",
-      username: "hs.nguyenquanga",
-      fullName: "Nguyễn Quang Anh",
-      groupName: "Nhóm 02",
-      consentStatus: "granted",
-      consentedBy: "guardian",
-    },
-    {
-      id: "s-4",
-      username: "hs.tranminhb",
-      fullName: "Trần Minh Bình",
-      groupName: "Nhóm 02",
-      consentStatus: "pending",
-    },
-    {
-      id: "s-5",
-      username: "hs.phamthid",
-      fullName: "Phạm Thị Dung",
-      groupName: "Nhóm 03",
-      consentStatus: "declined",
-      consentedBy: "guardian",
-    },
-  ]);
+  // State cho Modal đặt lại mật khẩu cả lớp
+  const [showResetAllModal, setShowResetAllModal] = useState(false);
+  const [isResettingAll, setIsResettingAll] = useState(false);
+  const [resetAllMessage, setResetAllMessage] = useState<string | null>(null);
 
-  const [consentModalStudent, setConsentModalStudent] = useState<StudentRow | null>(null);
-  const [formVersion, setFormVersion] = useState("v1.0");
-  const [selectedConsentStatus, setSelectedConsentStatus] = useState<"granted" | "declined">("granted");
-  const [selectedParty, setSelectedParty] = useState<"student" | "guardian" | "both">("both");
+  // State cho thông báo đặt lại mật khẩu 1 học sinh
+  const [singleResetSuccess, setSingleResetSuccess] = useState<{
+    username: string;
+    fullName: string;
+  } | null>(null);
+  const [isResettingSingle, setIsResettingSingle] = useState<string | null>(null);
 
   React.useEffect(() => {
     params.then((p) => setResolvedClassId(p.classId));
   }, [params]);
 
-  const classInfo = {
-    id: resolvedClassId || "c-10a1",
-    name: "10A1",
-    grade: 10,
-    schoolYear: "2026-2027",
-    projects: [
-      { id: "proj-p01", name: "Dự án Tin học 10: Xây dựng Trang web cá nhân", status: "active" },
-    ],
-  };
+  if (!resolvedClassId || isLoading) return <PortalDataState label="lớp học và học sinh" />;
+  if (error) return <PortalDataState label="lớp học và học sinh" error={error} onRetry={refresh} />;
+  if (!data) return <PortalDataState label="lớp học và học sinh" error="Không tìm thấy thông tin lớp học." onRetry={refresh} />;
 
-  const handleResetPassword = (username: string) => {
-    if (confirm(`Đặt lại mật khẩu cho học sinh @${username}? Mật khẩu tạm thời sẽ hiển thị duy nhất một lần.`)) {
-      const generated = createTempPassword(username);
-      setTempPasswordModal({ username, pass: generated });
+  const className = readString(data.class, "name", "Lớp học");
+  const classGrade = readNumber(data.class, "grade", 10);
+  const schoolYear = readString(data.class, "school_year", "2026-2027");
+  const students = data.students ?? [];
+  const projects = data.projects ?? [];
+
+  // Xử lý tạo thủ công 1 học sinh
+  const handleCreateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+
+    if (newStudentFullName.trim().length < 2) {
+      setCreateError("Họ và tên học sinh phải có tối thiểu 2 ký tự.");
+      return;
     }
+
+    if (!newStudentUsername.trim()) {
+      setCreateError("Vui lòng nhập mã học sinh / tên đăng nhập.");
+      return;
+    }
+
+    setIsCreating(true);
+    const result = await createStudent({
+      class_id: resolvedClassId,
+      full_name: newStudentFullName.trim(),
+      username: newStudentUsername.trim().toLowerCase(),
+    });
+    setIsCreating(false);
+
+    if (!result.ok) {
+      setCreateError(result.error);
+      return;
+    }
+
+    setCreatedStudentInfo({
+      username: result.data.username,
+      fullName: result.data.fullName,
+      password: result.data.tempPassword || DEFAULT_STUDENT_PASSWORD,
+    });
+    setNewStudentFullName("");
+    setNewStudentUsername("");
+    refresh();
   };
 
-  const handleSaveConsent = () => {
-    if (!consentModalStudent) return;
-    setStudents(
-      students.map((s) =>
-        s.id === consentModalStudent.id
-          ? {
-              ...s,
-              consentStatus: selectedConsentStatus,
-              consentedBy: selectedParty,
-            }
-          : s
+  // Xử lý đặt lại mật khẩu 1 học sinh về Abc_1111
+  const handleResetSinglePassword = async (studentId: string, studentUsername: string, studentFullName: string) => {
+    if (
+      !confirm(
+        `Bạn có chắc chắn muốn đặt lại mật khẩu của học sinh "${studentFullName}" (@${studentUsername}) về mật khẩu mặc định "${DEFAULT_STUDENT_PASSWORD}"?`
       )
-    );
-    setConsentModalStudent(null);
+    ) {
+      return;
+    }
+
+    setIsResettingSingle(studentId);
+    const result = await resetStudentPassword({
+      studentId,
+      classId: resolvedClassId,
+    });
+    setIsResettingSingle(null);
+
+    if (!result.ok) {
+      alert(`Lỗi đặt lại mật khẩu: ${result.error}`);
+      return;
+    }
+
+    setSingleResetSuccess({
+      username: studentUsername,
+      fullName: studentFullName,
+    });
+  };
+
+  // Xử lý đặt lại mật khẩu cả lớp về Abc_1111
+  const handleConfirmResetAll = async () => {
+    setIsResettingAll(true);
+    setResetAllMessage(null);
+
+    const result = await resetClassStudentsPassword({
+      classId: resolvedClassId,
+    });
+    setIsResettingAll(false);
+
+    if (!result.ok) {
+      alert(`Lỗi: ${result.error}`);
+      return;
+    }
+
+    setShowResetAllModal(false);
+    setResetAllMessage(`Đã đặt lại mật khẩu cho toàn bộ ${result.data.resetCount} học sinh về "${result.data.defaultPassword}".`);
   };
 
   return (
@@ -120,107 +173,122 @@ export default function TeacherClassDetailPage({
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
             <Link href="/teacher" className="hover:underline">
-              Tổng quan
+              Bàn làm việc
             </Link>
             <span>/</span>
             <span>Lớp phụ trách</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-            <span>Lớp {classInfo.name}</span>
-            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-semibold">
-              Khối {classInfo.grade} • Năm học {classInfo.schoolYear}
+            <span>Lớp {className}</span>
+            <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-semibold border border-blue-100">
+              Khối {classGrade} • Năm học {schoolYear}
             </span>
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Giáo viên phụ trách lớp quản lý danh sách học sinh, đồng ý nghiên cứu và mở dự án
+            Quản lý tài khoản học sinh, cấp mật khẩu ban đầu và thiết lập lại mật khẩu mặc định ({DEFAULT_STUDENT_PASSWORD})
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/teacher/classes/${classInfo.id}/students/import`}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+        {/* Nút hành động chính */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setCreateError(null);
+              setShowCreateModal(true);
+            }}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
           >
-            + Nhập học sinh (CSV)
-          </Link>
+            <span>+</span> <span>Thêm 1 học sinh</span>
+          </button>
+
           <Link
-            href="/teacher/projects/new"
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium rounded-lg"
+            href={`/teacher/classes/${resolvedClassId}/students/import`}
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
           >
-            Mở dự án mới
+            <span>📥</span> <span>Nhập từ Excel / CSV</span>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setShowResetAllModal(true)}
+            disabled={students.length === 0}
+            className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <span>🔄</span> <span>Đặt lại mật khẩu cả lớp</span>
+          </button>
         </div>
       </div>
 
-      {/* Hiển thị mật khẩu tạm */}
-      {tempPasswordModal && (
-        <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-amber-900 text-sm">
-              🔑 Mật khẩu tạm thời mới của học sinh @{tempPasswordModal.username}
-            </span>
-            <button
-              onClick={() => setTempPasswordModal(null)}
-              className="text-xs text-amber-800 hover:underline"
-            >
-              Đóng ✕
-            </button>
+      {/* Thông báo kết quả đặt lại cả lớp */}
+      {resetAllMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">✓</span>
+            <span>{resetAllMessage}</span>
           </div>
-          <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-amber-200">
-            <span className="font-mono text-xl font-extrabold text-indigo-700">
-              {tempPasswordModal.pass}
-            </span>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(tempPasswordModal.pass);
-                alert("Đã sao chép mật khẩu!");
-              }}
-              className="px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-md"
-            >
-              Sao chép
-            </button>
-          </div>
-          <p className="text-xs text-amber-800">
-            Mật khẩu chỉ hiển thị một lần. Hãy bàn giao trực tiếp cho học sinh.
-          </p>
+          <button onClick={() => setResetAllMessage(null)} className="text-emerald-700 hover:underline">
+            Đóng ✕
+          </button>
         </div>
       )}
 
-      {/* Dự án của lớp */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">
-          Dự án PBL của lớp {classInfo.name}
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          {classInfo.projects.map((proj) => (
-            <Link
-              key={proj.id}
-              href={`/teacher/projects/${proj.id}`}
-              className="p-3 border border-slate-200 rounded-lg hover:border-indigo-400 transition-colors flex items-center justify-between gap-4 w-full sm:w-96"
-            >
-              <div>
-                <span className="font-semibold text-xs text-slate-900 block">
-                  {proj.name}
-                </span>
-                <span className="text-[11px] text-emerald-600 font-medium">
-                  Trạng thái: Đang chạy (Active)
-                </span>
-              </div>
-              <span className="text-xs text-indigo-600 font-semibold">Xem dự án →</span>
-            </Link>
-          ))}
+      {/* Thông báo đặt lại lẻ thành công */}
+      {singleResetSuccess && (
+        <div className="p-4 bg-blue-50 border border-blue-200 text-blue-900 text-xs rounded-xl flex items-center justify-between">
+          <div>
+            Đã đặt lại mật khẩu của học sinh <strong>{singleResetSuccess.fullName}</strong> (@{singleResetSuccess.username}) về mặc định:{" "}
+            <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-700">
+              {DEFAULT_STUDENT_PASSWORD}
+            </span>
+          </div>
+          <button onClick={() => setSingleResetSuccess(null)} className="text-blue-700 hover:underline">
+            Đóng ✕
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Khối Dự án PBL của lớp */}
+      {projects.length > 0 && (
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2">
+            Dự án PBL của lớp {className} ({projects.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {projects.map((proj) => (
+              <Link
+                key={readString(proj, "id")}
+                href={`/teacher/projects/${readString(proj, "id")}`}
+                className="p-3 border border-slate-200 rounded-lg hover:border-blue-400 transition-colors flex flex-col justify-between gap-2"
+              >
+                <div>
+                  <span className="font-semibold text-xs text-slate-900 block line-clamp-1">
+                    {readString(proj, "title", "Dự án")}
+                  </span>
+                  <span className="text-[11px] text-emerald-600 font-medium">
+                    {readString(proj, "status") === "active" ? "Đang diễn ra" : "Bản nháp"}
+                  </span>
+                </div>
+                <span className="text-xs text-blue-600 font-semibold self-end">Xem chi tiết →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bảng danh sách học sinh */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">
-            Danh sách học sinh lớp {classInfo.name} ({students.length})
-          </h2>
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Danh sách học sinh lớp {className} ({students.length})
+            </h2>
+            <p className="text-xs text-slate-500">
+              Mật khẩu khởi tạo mặc định cho học sinh: <span className="font-mono font-bold text-blue-600">{DEFAULT_STUDENT_PASSWORD}</span>
+            </p>
+          </div>
           <span className="text-xs text-slate-500">
-            Đã đồng ý:{" "}
-            <strong>{students.filter((s) => s.consentStatus === "granted").length}</strong> em
+            Tổng cộng: <strong>{students.length}</strong> học sinh
           </span>
         </div>
 
@@ -229,130 +297,230 @@ export default function TeacherClassDetailPage({
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4 w-12 text-center">STT</th>
-                <th className="py-3 px-4">Tên đăng nhập</th>
+                <th className="py-3 px-4">Mã học sinh</th>
                 <th className="py-3 px-4">Họ và tên</th>
-                <th className="py-3 px-4">Nhóm trong dự án</th>
-                <th className="py-3 px-4">Đồng ý nghiên cứu</th>
-                <th className="py-3 px-4 text-right">Thao tác</th>
+                <th className="py-3 px-4">Trạng thái tài khoản</th>
+                <th className="py-3 px-4 text-right">Thao tác mật khẩu</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {students.map((student, idx) => (
-                <tr key={student.id} className="hover:bg-slate-50">
-                  <td className="py-2.5 px-4 text-center font-mono text-slate-400">
-                    {idx + 1}
-                  </td>
-                  <td className="py-2.5 px-4 font-mono font-medium text-slate-900">
-                    @{student.username}
-                  </td>
-                  <td className="py-2.5 px-4 font-medium text-slate-800">
-                    {student.fullName}
-                  </td>
-                  <td className="py-2.5 px-4 font-semibold text-indigo-700">
-                    {student.groupName}
-                  </td>
-                  <td className="py-2.5 px-4">
-                    {student.consentStatus === "granted" && (
-                      <Badge variant="success">
-                        Đồng ý ({student.consentedBy === "both" ? "HS & PH" : student.consentedBy})
-                      </Badge>
-                    )}
-                    {student.consentStatus === "pending" && (
-                      <Badge variant="warning">Chờ xác nhận</Badge>
-                    )}
-                    {student.consentStatus === "declined" && (
-                      <Badge variant="danger">Từ chối</Badge>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => setConsentModalStudent(student)}
-                      className="text-xs font-semibold text-indigo-600 hover:underline"
-                    >
-                      Ghi nhận đồng ý
-                    </button>
-                    <button
-                      onClick={() => handleResetPassword(student.username)}
-                      className="text-xs font-semibold text-amber-600 hover:underline"
-                    >
-                      Reset mật khẩu
-                    </button>
+              {students.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                    Lớp chưa có học sinh nào. Bạn có thể bấm <strong>“+ Thêm 1 học sinh”</strong> hoặc{" "}
+                    <strong>“Nhập từ Excel / CSV”</strong> để tạo tài khoản.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                students.map((student, idx) => {
+                  const sId = readString(student, "id");
+                  const sUsername = readString(student, "username");
+                  const sFullName = readString(student, "full_name");
+                  const isActive = student.is_active !== false;
+
+                  return (
+                    <tr key={sId} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 text-center font-mono text-slate-400">{idx + 1}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900">@{sUsername}</td>
+                      <td className="py-3 px-4 font-medium text-slate-800">{sFullName}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant={isActive ? "success" : "danger"}>
+                          {isActive ? "Hoạt động" : "Bị khóa"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          type="button"
+                          disabled={isResettingSingle === sId}
+                          onClick={() => handleResetSinglePassword(sId, sUsername, sFullName)}
+                          className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors disabled:opacity-50"
+                          title="Đặt lại mật khẩu của học sinh này về Abc_1111"
+                        >
+                          {isResettingSingle === sId ? "Đang xử lý..." : "🔑 Đặt lại về Abc_1111"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal Ghi nhận đồng ý nghiên cứu */}
-      {consentModalStudent && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <h3 className="text-base font-bold text-slate-900">
-              Ghi nhận đồng ý nghiên cứu: {consentModalStudent.fullName}
-            </h3>
-            <p className="text-xs text-slate-500">
-              Cập nhật thông tin phiếu đồng ý tham gia nghiên cứu (gọi thủ tục <code className="font-mono text-indigo-700">record_consent</code>).
-            </p>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Trạng thái đồng ý
-                </label>
-                <select
-                  value={selectedConsentStatus}
-                  onChange={(e) => setSelectedConsentStatus(e.target.value as "granted" | "declined")}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="granted">Đồng ý tham gia (Granted)</option>
-                  <option value="declined">Từ chối tham gia (Declined)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Bên ký phiếu xác nhận
-                </label>
-                <select
-                  value={selectedParty}
-                  onChange={(e) => setSelectedParty(e.target.value as "student" | "guardian" | "both")}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="both">Cả học sinh và phụ huynh (both)</option>
-                  <option value="student">Chỉ học sinh (student)</option>
-                  <option value="guardian">Chỉ phụ huynh (guardian)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Phiên bản mẫu phiếu (form_version)
-                </label>
-                <input
-                  type="text"
-                  value={formVersion}
-                  onChange={(e) => setFormVersion(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+      {/* MODAL 1: TẠO THỦ CÔNG 1 HỌC SINH */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base text-slate-900">Thêm học sinh mới vào lớp {className}</h3>
               <button
                 type="button"
-                onClick={() => setConsentModalStudent(null)}
-                className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreatedStudentInfo(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
               >
-                Hủy
+                ✕
+              </button>
+            </div>
+
+            {createError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl" role="alert">
+                {createError}
+              </div>
+            )}
+
+            {createdStudentInfo ? (
+              <div className="space-y-4 py-2">
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs text-emerald-950">
+                  <div className="font-bold text-sm text-emerald-800 flex items-center gap-1.5">
+                    <span>✓</span> Tạo tài khoản học sinh thành công!
+                  </div>
+                  <div>Học sinh: <strong>{createdStudentInfo.fullName}</strong></div>
+                  <div>Mã đăng nhập: <strong className="font-mono text-slate-900">@{createdStudentInfo.username}</strong></div>
+                  <div>
+                    Mật khẩu mặc định:{" "}
+                    <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-700">
+                      {createdStudentInfo.password}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `Tài khoản: @${createdStudentInfo.username}\nMật khẩu: ${createdStudentInfo.password}\nĐăng nhập tại hệ thống EDUHT.`
+                      );
+                      alert("Đã sao chép thông tin tài khoản!");
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                  >
+                    Sao chép thông tin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatedStudentInfo(null);
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  >
+                    + Thêm tiếp học sinh khác
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCreateStudent} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Họ và tên học sinh <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newStudentFullName}
+                    onChange={(e) => setNewStudentFullName(e.target.value)}
+                    placeholder="Ví dụ: Nguyễn Văn An"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mã học sinh / Tên đăng nhập <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newStudentUsername}
+                    onChange={(e) => setNewStudentUsername(e.target.value)}
+                    placeholder="Ví dụ: hs.240101 hoặc an.nv"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Gồm 3–30 ký tự, không chứa dấu cách hoặc ký tự đặc biệt.</p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1">
+                  <div>Lớp ghi danh: <strong>{className}</strong> (Khối {classGrade})</div>
+                  <div>
+                    Mật khẩu mặc định: <strong className="font-mono text-blue-600">{DEFAULT_STUDENT_PASSWORD}</strong>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Học sinh sẽ đăng nhập bằng tài khoản này và đổi mật khẩu ở lần đăng nhập đầu tiên.
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreating}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    {isCreating ? "Đang tạo..." : "Khởi tạo tài khoản"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ĐẶT LẠI MẬT KHẨU CẢ LỚP */}
+      {showResetAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <h3 className="font-bold text-base text-slate-900">
+              Xác nhận đặt lại mật khẩu cho cả lớp {className}
+            </h3>
+
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>⚠️</span> Thao tác áp dụng cho toàn bộ {students.length} học sinh
+              </div>
+              <div>
+                Tất cả học sinh trong lớp sẽ được đặt lại mật khẩu về mặc định:{" "}
+                <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-amber-300 text-amber-800">
+                  {DEFAULT_STUDENT_PASSWORD}
+                </span>
+                .
+              </div>
+              <div>Khi đăng nhập lại, học sinh sẽ được yêu cầu đổi mật khẩu mới.</div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isResettingAll}
+                onClick={() => setShowResetAllModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Hủy bỏ
               </button>
               <button
                 type="button"
-                onClick={handleSaveConsent}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg"
+                disabled={isResettingAll}
+                onClick={handleConfirmResetAll}
+                className="px-5 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
               >
-                Lưu vào hệ thống
+                {isResettingAll ? "Đang xử lý..." : "Xác nhận đặt lại cả lớp"}
               </button>
             </div>
           </div>

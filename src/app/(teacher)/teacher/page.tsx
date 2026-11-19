@@ -66,8 +66,14 @@ export default function TeacherDashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/teacher/classes"
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
+          >
+            <span>🏫</span> <span>Quản lý học sinh & Lớp học</span>
+          </Link>
+          <Link
             href="/teacher/projects/new"
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
           >
             + Khởi tạo dự án mới
           </Link>
@@ -86,7 +92,7 @@ export default function TeacherDashboardPage() {
             </h2>
           </div>
           <span className="text-xs text-slate-400 italic">
-            Tự động sinh từ trạng thái CSDL thực tế
+            Tự động tổng hợp theo tiến độ thực tế
           </span>
         </div>
 
@@ -243,12 +249,21 @@ export default function TeacherDashboardPage() {
                   <strong>{cls.projectCount}</strong> dự án
                 </div>
               </div>
-              <Link
-                href={`/teacher/classes/${cls.id}`}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg"
-              >
-                Vào lớp →
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/teacher/classes/${cls.id}/students/import`}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+                  title="Nhập danh sách học sinh từ file Excel hoặc CSV"
+                >
+                  📥 Nhập Excel
+                </Link>
+                <Link
+                  href={`/teacher/classes/${cls.id}`}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+                >
+                  Quản lý học sinh →
+                </Link>
+              </div>
             </div>
           ))}
         </div>

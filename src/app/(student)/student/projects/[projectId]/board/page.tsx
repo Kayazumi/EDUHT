@@ -4,6 +4,36 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PortalDataState } from "@/components/ui/portal-data-state";
+import { usePortalData } from "@/hooks/use-portal-data";
+import { createTask, moveTask, setDueDate } from "@/server/actions/tasks";
+
+type DataRow = Record<string, unknown>;
+
+interface StudentBoardData {
+  project: DataRow | null;
+  group: DataRow | null;
+  groupId: string;
+  tasks: DataRow[];
+  members: DataRow[];
+  events: DataRow[];
+}
+
+function readString(row: DataRow | null | undefined, key: string, fallback = "") {
+  const value = row?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "Chưa đặt hạn";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Chưa đặt hạn" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short" }).format(date);
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
 
 interface KanbanTask {
   id: string;
@@ -13,6 +43,7 @@ interface KanbanTask {
   assigneeId: string | null;
   assigneeName: string | null;
   dueDate: string;
+  dueAt?: string;
   isOverdue: boolean;
   curriculumTags: string[];
   completedAt?: string;
@@ -31,82 +62,28 @@ export default function StudentProjectBoardPage({
   params: Promise<{ projectId: string }>;
 }) {
   const [resolvedId, setResolvedId] = useState("");
-  const [tasks, setTasks] = useState<KanbanTask[]>([
-    {
-      id: "tk-1",
-      title: "Viết kịch bản hội thoại mẫu cho chatbot",
-      description: "Xây dựng 20 kịch bản hội thoại mẫu tương tác câu hỏi Tin học 12",
-      status: "todo",
-      assigneeId: null,
-      assigneeName: null,
-      dueDate: "2026-11-12",
-      isOverdue: false,
-      curriculumTags: ["DL-01", "CS-02"],
-    },
-    {
-      id: "tk-2",
-      title: "Thiết kế poster giới thiệu sản phẩm",
-      description: "Dùng Canva hoặc Figma thiết kế poster khổ A1 theo nhận diện dự án",
-      status: "todo",
-      assigneeId: "hs2",
-      assigneeName: "Trần Thị Bình",
-      dueDate: "2026-11-14",
-      isOverdue: false,
-      curriculumTags: ["ICT-01"],
-    },
-    {
-      id: "tk-3",
-      title: "Dựng slide thuyết trình giai đoạn 1",
-      description: "Slide trình chiếu cấu trúc kiến trúc và demo hoạt động chatbot",
-      status: "doing",
-      assigneeId: "hs3",
-      assigneeName: "Lê Hoàng Cường",
-      dueDate: "2026-11-02",
-      isOverdue: true, // Thẻ quá hạn
-      curriculumTags: ["ICT-03"],
-    },
-    {
-      id: "tk-4",
-      title: "Tích hợp API xử lý ngôn ngữ tự nhiên",
-      description: "Gắn API kết nối mô hình xử lý ngôn ngữ và phân loại câu hỏi",
-      status: "doing",
-      assigneeId: "hs1",
-      assigneeName: "Nguyễn Văn An (Tôi)",
-      dueDate: "2026-11-06",
-      isOverdue: false,
-      curriculumTags: ["CS-01"],
-    },
-    {
-      id: "tk-5",
-      title: "Thu thập tập dữ liệu câu hỏi lý thuyết",
-      description: "Biên tập 100 câu hỏi trắc nghiệm Tin học 12 định dạng JSON",
-      status: "done",
-      assigneeId: "hs2",
-      assigneeName: "Trần Thị Bình",
-      dueDate: "2026-10-28",
-      completedAt: "2026-10-27 15:30",
-      isOverdue: false,
-      curriculumTags: ["DL-01"],
-    },
-    {
-      id: "tk-6",
-      title: "Thiết lập môi trường mã nguồn Git & Kanban",
-      description: "Khởi tạo repo và phân chia các cột công việc ban đầu",
-      status: "done",
-      assigneeId: "hs1",
-      assigneeName: "Nguyễn Văn An (Tôi)",
-      dueDate: "2026-10-20",
-      completedAt: "2026-10-19 10:15",
-      isOverdue: false,
-      curriculumTags: ["ICT-02"],
-    },
-  ]);
-
-  const teamMembers = [
-    { id: "hs1", name: "Nguyễn Văn An (Tôi)" },
-    { id: "hs2", name: "Trần Thị Bình" },
-    { id: "hs3", name: "Lê Hoàng Cường" },
-  ];
+  const { data, error, isLoading, refresh } = usePortalData<StudentBoardData>("studentBoard", resolvedId);
+  const tasks: KanbanTask[] = (data?.tasks ?? []).map((task) => {
+    const assigneeId = typeof task.assignee_id === "string" ? task.assignee_id : null;
+    const assignee = data?.members.find((member) => member.student_id === assigneeId);
+    return {
+      id: readString(task, "task_id"),
+      title: readString(task, "title", "Nhiệm vụ"),
+      description: readString(task, "description"),
+      status: task.status === "doing" || task.status === "done" ? task.status : "todo",
+      assigneeId,
+      assigneeName: readString(assignee, "full_name") || null,
+      dueDate: typeof task.due_at === "string" ? formatDate(task.due_at) : "Chưa đặt hạn",
+      dueAt: typeof task.due_at === "string" ? task.due_at.slice(0, 10) : undefined,
+      isOverdue: task.is_late === true,
+      curriculumTags: [],
+      completedAt: typeof task.completed_at === "string" ? formatDateTime(task.completed_at) : undefined,
+    };
+  });
+  const teamMembers = (data?.members ?? []).map((member) => ({
+    id: readString(member, "student_id"),
+    name: readString(member, "full_name", "Học sinh"),
+  }));
 
   // Modals state
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
@@ -114,7 +91,8 @@ export default function StudentProjectBoardPage({
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("2026-11-15");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [tempDueDate, setTempDueDate] = useState("");
 
   // Modal yêu cầu gán người phụ trách khi chuyển sang doing/done (Kịch bản 3)
   const [assigneeRequiredModal, setAssigneeRequiredModal] = useState<{
@@ -124,100 +102,129 @@ export default function StudentProjectBoardPage({
   const [tempAssignee, setTempAssignee] = useState("");
 
   const [notification, setNotification] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   React.useEffect(() => {
     params.then((p) => setResolvedId(p.projectId));
   }, [params]);
 
+  if (!resolvedId || isLoading) return <PortalDataState label="bảng nhiệm vụ" />;
+  if (error) return <PortalDataState label="bảng nhiệm vụ" error={error} onRetry={refresh} />;
+  if (!data?.project || !data.group) {
+    return <PortalDataState label="nhóm dự án" error="Không tìm thấy nhóm hoặc dự án của bạn." onRetry={refresh} />;
+  }
+
   // Quy tắc nghiệp vụ A3.4 & Scenario 3: Chuyển sang DOING hoặc DONE BẮT BUỘC có assignee
-  const handleMoveStatus = (task: KanbanTask, targetStatus: "todo" | "doing" | "done") => {
+  const handleMoveStatus = async (task: KanbanTask, targetStatus: "todo" | "doing" | "done") => {
     if (task.status === targetStatus) return;
 
-    if ((targetStatus === "doing" || targetStatus === "done") && !task.assigneeId) {
-      // Yêu cầu chọn người phụ trách trước
+    if ((targetStatus === "doing" || targetStatus === "done") && (!task.assigneeId || !task.dueAt)) {
+      // Cần đủ người phụ trách và hạn hoàn thành trước khi chuyển trạng thái.
       setAssigneeRequiredModal({ task, targetStatus });
-      setTempAssignee(teamMembers[0]?.id || "");
+      setTempAssignee(task.assigneeId || teamMembers[0]?.id || "");
+      setTempDueDate(task.dueAt || "");
       return;
     }
 
-    applyTaskStatusMove(task.id, targetStatus, task.assigneeId, task.assigneeName);
+    void applyTaskStatusMove(task.id, targetStatus, task.assigneeId);
   };
 
-  const applyTaskStatusMove = (
+  const applyTaskStatusMove = async (
     taskId: string,
     targetStatus: "todo" | "doing" | "done",
-    assigneeId: string | null,
-    assigneeName: string | null
+    assigneeId: string | null
   ) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          const nowStr = new Date().toLocaleString("vi-VN");
-          return {
-            ...t,
-            status: targetStatus,
-            assigneeId: assigneeId ?? t.assigneeId,
-            assigneeName: assigneeName ?? t.assigneeName,
-            completedAt: targetStatus === "done" ? nowStr : undefined,
-          };
-        }
-        return t;
-      })
-    );
+    setIsSaving(true);
+    setErrorMessage(null);
+    if (targetStatus !== "todo" && assigneeRequiredModal?.task.id === taskId && !assigneeRequiredModal.task.dueAt) {
+      if (!tempDueDate) {
+        setIsSaving(false);
+        setErrorMessage("Hãy chọn hạn hoàn thành trước khi chuyển thẻ sang Đang làm hoặc Hoàn thành.");
+        return false;
+      }
+      const dueResult = await setDueDate({ taskId, dueDate: tempDueDate });
+      if (!dueResult.ok) {
+        setIsSaving(false);
+        setErrorMessage(dueResult.error);
+        return false;
+      }
+    }
+    const result = await moveTask({ taskId, status: targetStatus, assigneeId });
+    setIsSaving(false);
+    if (!result.ok) {
+      setErrorMessage(result.error);
+      return false;
+    }
 
     const actionText =
       targetStatus === "doing" ? "ĐANG LÀM" : targetStatus === "done" ? "HOÀN THÀNH" : "CHỜ LÀM";
     setNotification(`Đã chuyển thẻ sang cột [${actionText}]!`);
     setTimeout(() => setNotification(null), 3000);
+    refresh();
+    return true;
   };
 
-  const handleConfirmAssignee = () => {
+  const handleConfirmAssignee = async () => {
     if (!assigneeRequiredModal) return;
-    const member = teamMembers.find((m) => m.id === tempAssignee);
-    applyTaskStatusMove(
+    const moved = await applyTaskStatusMove(
       assigneeRequiredModal.task.id,
       assigneeRequiredModal.targetStatus,
-      tempAssignee,
-      member ? member.name : null
+      tempAssignee
     );
-    setAssigneeRequiredModal(null);
+    if (moved) setAssigneeRequiredModal(null);
   };
 
-  const handleCreateTask = (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-
-    const member = teamMembers.find((m) => m.id === newTaskAssignee);
-    const newTask: KanbanTask = {
-      id: `tk-${tasks.length + 1}`,
-      title: newTaskTitle.trim(),
-      description: newTaskDesc.trim(),
-      status: "todo",
+    if (!newTaskTitle.trim() || !data) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+    const result = await createTask({
+      groupId: data.groupId,
+      projectId: resolvedId,
+      title: newTaskTitle,
+      description: newTaskDesc,
       assigneeId: newTaskAssignee || null,
-      assigneeName: member ? member.name : null,
-      dueDate: newTaskDueDate,
-      isOverdue: false,
-      curriculumTags: ["CS- tự do"],
-    };
+      dueDate: newTaskDueDate || null,
+      position: 0,
+    });
+    setIsSaving(false);
+    if (!result.ok) {
+      setErrorMessage(result.error);
+      return;
+    }
 
-    setTasks([newTask, ...tasks]);
     setShowNewTaskModal(false);
     setNewTaskTitle("");
     setNewTaskDesc("");
     setNewTaskAssignee("");
     setNotification("Đã thêm thẻ nhiệm vụ mới vào cột TO DO!");
     setTimeout(() => setNotification(null), 3000);
+    refresh();
   };
 
   const todoTasks = tasks.filter((t) => t.status === "todo");
   const doingTasks = tasks.filter((t) => t.status === "doing");
   const doneTasks = tasks.filter((t) => t.status === "done");
 
-  const taskLogs: TaskEventLog[] = [
-    { id: "l1", time: "Hôm nay 10:15", actorName: "Nguyễn Văn An", action: "Đã cập nhật mô tả thẻ" },
-    { id: "l2", time: "Hôm qua 16:40", actorName: "Trần Thị Bình", action: "Đã nhận phụ trách nhiệm vụ" },
-    { id: "l3", time: "28/10 09:20", actorName: "Lê Hoàng Cường", action: "Đã đổi hạn hoàn thành" },
-  ];
+  const eventLabels: Record<string, string> = {
+    created: "Đã tạo thẻ",
+    assigned: "Đã đổi người phụ trách",
+    status_changed: "Đã cập nhật trạng thái",
+    due_changed: "Đã đổi hạn hoàn thành",
+    edited: "Đã chỉnh sửa thẻ",
+    archived: "Đã lưu trữ thẻ",
+  };
+  const taskLogs: TaskEventLog[] = (data.events ?? []).map((event) => {
+    const actor = data.members.find((member) => member.student_id === event.actor_id);
+    return {
+      id: String(event.id),
+      time: formatDateTime(readString(event, "occurred_at")),
+      actorName: readString(actor, "full_name", "Thành viên nhóm"),
+      action: eventLabels[readString(event, "event_type")] ?? "Đã cập nhật thẻ",
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -235,7 +242,7 @@ export default function StudentProjectBoardPage({
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">Bảng Kanban nhóm</h1>
-            <Badge variant="info">Nhóm 01 · Còn 18 ngày</Badge>
+            <Badge variant="info">{readString(data.group, "name", "Nhóm")} · Hạn dự án {formatDate(readString(data.project, "due_on"))}</Badge>
           </div>
           <p className="text-xs text-gray-500 mt-1">
             Kéo thả hoặc dùng menu để điều phối công việc giữa các thành viên. Thẻ chuyển sang DOING/DONE bắt buộc có người phụ trách.
@@ -249,14 +256,20 @@ export default function StudentProjectBoardPage({
           >
             ⭐ Đánh giá đồng đẳng
           </Link>
-          <button
+          {data.project.allow_custom_tasks !== false && <button
             onClick={() => setShowNewTaskModal(true)}
             className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs"
           >
             + Thêm thẻ nhiệm vụ
-          </button>
+          </button>}
         </div>
       </div>
+
+      {errorMessage && (
+        <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg">
+          {errorMessage}
+        </div>
+      )}
 
       {notification && (
         <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-lg flex items-center justify-between">
@@ -280,6 +293,7 @@ export default function StudentProjectBoardPage({
           </div>
 
           <div className="space-y-3 flex-1">
+            {todoTasks.length === 0 && <p className="text-xs text-slate-500 text-center py-8">Chưa có nhiệm vụ cần làm.</p>}
             {todoTasks.map((task) => (
               <div
                 key={task.id}
@@ -335,6 +349,7 @@ export default function StudentProjectBoardPage({
           </div>
 
           <div className="space-y-3 flex-1">
+            {doingTasks.length === 0 && <p className="text-xs text-blue-700 text-center py-8">Chưa có nhiệm vụ đang làm.</p>}
             {doingTasks.map((task) => (
               <div
                 key={task.id}
@@ -408,6 +423,7 @@ export default function StudentProjectBoardPage({
           </div>
 
           <div className="space-y-3 flex-1">
+            {doneTasks.length === 0 && <p className="text-xs text-emerald-700 text-center py-8">Chưa có nhiệm vụ hoàn thành.</p>}
             {doneTasks.map((task) => (
               <div
                 key={task.id}
@@ -508,6 +524,7 @@ export default function StudentProjectBoardPage({
               <div className="pt-2 border-t">
                 <span className="font-semibold text-gray-700 block mb-2">Nhật ký hoạt động trên thẻ:</span>
                 <div className="space-y-1.5 text-[11px]">
+                  {taskLogs.length === 0 && <p className="text-gray-400">Chưa có hoạt động nào trên thẻ.</p>}
                   {taskLogs.map((log) => (
                     <div key={log.id} className="flex items-center justify-between text-gray-500 py-1 border-b border-gray-50">
                       <span><strong>{log.actorName}</strong>: {log.action}</span>
@@ -555,6 +572,20 @@ export default function StudentProjectBoardPage({
               </select>
             </div>
 
+            {!assigneeRequiredModal.task.dueAt && (
+              <div className="space-y-2 text-xs">
+                <label className="block font-medium text-gray-700" htmlFor="task-due-date">Hạn hoàn thành</label>
+                <input
+                  id="task-due-date"
+                  type="date"
+                  required
+                  value={tempDueDate}
+                  onChange={(e) => setTempDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -566,6 +597,7 @@ export default function StudentProjectBoardPage({
               <button
                 type="button"
                 onClick={handleConfirmAssignee}
+                disabled={isSaving}
                 className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
               >
                 Xác nhận & Chuyển thẻ
@@ -643,6 +675,7 @@ export default function StudentProjectBoardPage({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
                 >
                   Tạo thẻ

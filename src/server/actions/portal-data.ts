@@ -154,8 +154,12 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
         return { ok: true, data: { group, tasks, events, members: profiles } };
       }
       case "teacherProgress": {
-        const [groups, contributions] = await Promise.all([filtered("v_group_progress", "project_id", id), filtered("v_student_contribution", "project_id", id)]);
-        return { ok: true, data: { groups, contributions } };
+        const [groups, contributions, groupDetails] = await Promise.all([
+          filtered("v_group_progress", "project_id", id),
+          filtered("v_student_contribution", "project_id", id),
+          filtered("groups", "project_id", id, "id,name"),
+        ]);
+        return { ok: true, data: { groups, contributions, groupDetails } };
       }
       case "teacherEvaluation": {
         const [rounds, criteria] = await Promise.all([filtered("evaluation_rounds", "project_id", id), filtered("bars_criteria", "project_id", id)]);
@@ -202,31 +206,60 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
         const membership = await db.from("group_members").select("group_id,project_id,student_id").eq("student_id", profile.id).eq("project_id", id ?? "").maybeSingle();
         if (membership.error) throw membership.error;
         if (!membership.data) return { ok: false, error: "Bạn chưa thuộc nhóm trong dự án này" };
-        const [project, groups, tasks, members, rounds] = await Promise.all([
-          one("projects", "id", id), filtered("group_members", "group_id", membership.data.group_id),
-          filtered("tasks", "group_id", membership.data.group_id), filtered("v_group_members", "group_id", membership.data.group_id),
+        const [project, group, tasksResult, taskStatusResult, members, rounds, eventsResult] = await Promise.all([
+          one("projects", "id", id), one("groups", "id", membership.data.group_id),
+          db.from("tasks").select("*").eq("group_id", membership.data.group_id).is("archived_at", null).order("position", { ascending: true }),
+          db.from("v_task_status").select("task_id,is_late").eq("group_id", membership.data.group_id).eq("is_valid", true),
+          filtered("v_group_members", "group_id", membership.data.group_id),
           filtered("evaluation_rounds", "project_id", id),
+          db.from("task_events").select("id,task_id,actor_id,event_type,occurred_at").eq("group_id", membership.data.group_id).order("occurred_at", { ascending: false }).limit(5),
         ]);
-        return { ok: true, data: { project, groupId: membership.data.group_id, groups, tasks, members, rounds } };
+        if (tasksResult.error) throw tasksResult.error;
+        if (taskStatusResult.error) throw taskStatusResult.error;
+        if (eventsResult.error) throw eventsResult.error;
+        const lateByTask = new Map((taskStatusResult.data ?? []).map((row) => [row.task_id, row.is_late]));
+        return {
+          ok: true,
+          data: {
+            project,
+            group,
+            groupId: membership.data.group_id,
+            tasks: (tasksResult.data ?? []).map((task) => ({
+              ...task,
+              task_id: task.id,
+              is_late: lateByTask.get(task.id) === true,
+            })),
+            members,
+            rounds,
+            events: eventsResult.data ?? [],
+          },
+        };
       }
       case "studentReview": {
-        const memberships = await filtered("group_members", "student_id", profile.id);
-        const projectIds = memberships.map((row) => rowString(row, "project_id"));
-        const rounds = await ids("evaluation_rounds", "project_id", projectIds);
-        const reviews = rounds.length ? await filtered("peer_reviews", "rater_id", profile.id) : [];
+        if (!id) return { ok: false, error: "Thiếu mã dự án cần tải đánh giá" };
+        const rounds = await filtered("evaluation_rounds", "project_id", id);
+        const roundIds = rounds.map((row) => rowString(row, "id"));
+        const reviewsResult = roundIds.length
+          ? await db.from("peer_reviews").select("*").in("round_id", roundIds).eq("rater_id", profile.id)
+          : { data: [], error: null };
+        if (reviewsResult.error) throw reviewsResult.error;
+        const reviews = (reviewsResult.data ?? []) as unknown as DataRow[];
         const profiles = await ids("profiles", "id", [...new Set(reviews.map((row) => rowString(row, "ratee_id")))]);
         return { ok: true, data: { rounds, reviews, profiles } };
       }
       case "studentReviewForm": {
-        const review = await db.from("peer_reviews").select("*").eq("round_id", id ?? "").eq("rater_id", profile.id).eq("ratee_id", childId ?? "").maybeSingle();
-        if (review.error) throw review.error;
-        if (!review.data) return { ok: false, error: "Không tìm thấy phiếu đánh giá" };
-        const [criteria, answers, ratee] = await Promise.all([
-          filtered("bars_criteria", "project_id", review.data.project_id), filtered("peer_review_answers", "review_id", review.data.id),
+        if (!id || !childId) return { ok: false, error: "Thiếu mã dự án hoặc thành viên cần đánh giá" };
+        const { data: review, error: reviewError } = await db.from("peer_reviews").select("*").eq("project_id", id).eq("rater_id", profile.id).eq("ratee_id", childId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (reviewError) throw reviewError;
+        if (!review) return { ok: false, error: "Không tìm thấy phiếu đánh giá được giao cho bạn" };
+        const [criteria, answers, ratee, round] = await Promise.all([
+          filtered("bars_criteria", "project_id", rowString(review as unknown as DataRow, "project_id")),
+          filtered("peer_review_answers", "review_id", rowString(review as unknown as DataRow, "id")),
           one("profiles", "id", childId, "id,full_name"),
+          one("evaluation_rounds", "id", rowString(review as unknown as DataRow, "round_id")),
         ]);
         const levels = await ids("bars_levels", "criterion_id", criteria.map((row) => rowString(row, "id")));
-        return { ok: true, data: { review: review.data, criteria, levels, answers, ratee } };
+        return { ok: true, data: { review, criteria, levels, answers, ratee, round } };
       }
       case "studentResults": {
         const result = await db.rpc("get_my_results", { p_project_id: id });

@@ -24,6 +24,7 @@ export const routes = {
   },
   teacher: {
     dashboard: "/teacher",
+    classesList: "/teacher/classes",
     classes: (classId: string) => `/teacher/classes/${classId}`,
     importStudents: (classId: string) => `/teacher/classes/${classId}/students/import`,
     projects: "/teacher/projects",

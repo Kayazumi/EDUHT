@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { loadPortalData, type PortalDataView } from "@/server/actions/portal-data";
 
 export function usePortalData<T>(view: PortalDataView, id?: string, childId?: string) {
@@ -12,16 +12,18 @@ export function usePortalData<T>(view: PortalDataView, id?: string, childId?: st
 
   useEffect(() => {
     let active = true;
-    loadPortalData({ view, id, childId }).then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setResult({ key: requestKey, data: result.data as T, error: null });
-      } else {
-        setResult({ key: requestKey, data: null, error: result.error });
-      }
-    }).catch((cause: unknown) => {
-      if (!active) return;
-      setResult({ key: requestKey, data: null, error: cause instanceof Error ? cause.message : "Không thể tải dữ liệu" });
+    startTransition(() => {
+      void loadPortalData({ view, id, childId }).then((result) => {
+        if (!active) return;
+        if (result.ok) {
+          setResult({ key: requestKey, data: result.data as T, error: null });
+        } else {
+          setResult({ key: requestKey, data: null, error: result.error });
+        }
+      }).catch((cause: unknown) => {
+        if (!active) return;
+        setResult({ key: requestKey, data: null, error: cause instanceof Error ? cause.message : "Không thể tải dữ liệu" });
+      });
     });
     return () => { active = false; };
   }, [view, id, childId, requestKey]);

@@ -72,9 +72,22 @@ npm run dev
 
 Mở [http://localhost:3000](http://localhost:3000). Dừng bằng Ctrl+C. Nếu cổng 3000 đang bận, dùng địa chỉ (chẳng hạn 3001) được in ra terminal. Trên Windows, nếu Turbopack lỗi, thử npm run dev -- --webpack.
 
-### 4. Đăng nhập
+### 4. Đăng nhập và Danh sách tài khoản
 
-Database của nhóm có Admin, admin1–admin3, giáo viên gv01 và học sinh spt01–spt30. Username đăng nhập không phân biệt chữ hoa/thường. Nhận mật khẩu từ trưởng nhóm; không ghi mật khẩu vào README hoặc GitHub.
+Hệ thống hỗ trợ đăng nhập bằng **Tên đăng nhập (Username)** hoặc **Email**. Tên đăng nhập không phân biệt chữ hoa/thường.
+
+#### Bảng tài khoản dùng thử / kiểm thử:
+
+| Vai trò | Tên đăng nhập (Username) | Mật khẩu mặc định | Ghi chú |
+| :--- | :--- | :--- | :--- |
+| **Quản trị viên (Admin)** | `admin`, `admin1`, `admin2`, `admin3` | `Abc_1111` | Toàn quyền cấu hình hệ thống, quản lý người dùng và dự án |
+| **Giáo viên (Teacher)** | `gv01` | `Abc_1111` | Quản lý lớp học, tạo tài khoản học sinh (thủ công / Excel), chấm điểm BARS, theo dõi Kanban |
+| **Học sinh (Student)** | `spt01` đến `spt30` (ví dụ: `spt01`, `spt02`,...) | `Abc_1111` | Thành viên lớp 10C4/12A1: thực hiện nhiệm vụ Kanban, đánh giá đồng đẳng (Peer review) |
+
+> [!NOTE]
+> - **Tài khoản học sinh mới:** Khi giáo viên tạo học sinh mới (tạo từng bạn hoặc nhập danh sách hàng loạt từ file Excel/CSV), mật khẩu khởi tạo mặc định cho học sinh luôn là `Abc_1111`.
+> - **Khôi phục mật khẩu học sinh:** Nếu học sinh quên mật khẩu, giáo viên có thể vào mục **Lớp học & Học sinh** (`/teacher/classes/[classId]`) để **Đặt lại mật khẩu** cho từng học sinh hoặc **Đặt lại mật khẩu toàn bộ lớp** về mặc định `Abc_1111`.
+> - Tài khoản có email placeholder kết thúc bằng `@example.invalid` không nhận email thật; admin hoặc giáo viên có thể hỗ trợ reset mật khẩu trực tiếp trong hệ thống mà không cần OTP email.
 
 Tài khoản có email placeholder không nhận thư sẽ không thể dùng quên mật khẩu cho tới khi admin cập nhật email thật. Giáo viên tự đăng ký phải được admin kích hoạt sau khi xác minh email. Admin không có form tự đăng ký; admin khác phải nâng vai trò tài khoản hiện có.
 

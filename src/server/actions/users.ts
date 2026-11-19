@@ -12,8 +12,11 @@ import {
   createStudentSchema,
   studentCsvRowSchema,
 } from "@/shared/validation/user";
+import { parseStudentsExcel } from "@/server/csv/parse-students";
 import { z } from "zod";
 import type { Role } from "@/shared/config/roles";
+
+import { DEFAULT_STUDENT_PASSWORD } from "@/shared/config/defaults";
 
 function generateTempPassword(prefix: "Hs" | "Gv"): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -86,17 +89,35 @@ export async function createTeacher(
 
 export async function createStudent(
   input: unknown
-): Promise<ActionResult<{ id: string; tempPassword?: string }>> {
+): Promise<ActionResult<{ id: string; username: string; fullName: string; tempPassword?: string }>> {
   try {
-    await requireAuthenticatedRole("admin");
+    const actor = await getProfile();
+    if (!actor || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
+      return { ok: false, error: "Bạn không có quyền tạo tài khoản học sinh" };
+    }
+
     const parsed = createStudentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.errors[0]?.message || "Dữ liệu không hợp lệ" };
     }
 
-    const { username, full_name, class_id } = parsed.data;
+    const { username, full_name, class_id, password } = parsed.data;
     const admin = createAdminClient();
-    const tempPassword = generateTempPassword("Hs");
+
+    if (actor.role === "teacher") {
+      const { data: ownedClass, error: classError } = await admin
+        .from("classes")
+        .select("id")
+        .eq("id", class_id)
+        .eq("teacher_id", actor.id)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (classError || !ownedClass) {
+        return { ok: false, error: "Bạn không được phân công phụ trách lớp học này" };
+      }
+    }
+
+    const tempPassword = password || DEFAULT_STUDENT_PASSWORD;
     const email = internalEmail(username);
 
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
@@ -134,7 +155,7 @@ export async function createStudent(
 
     return {
       ok: true,
-      data: { id: authUser.user.id, tempPassword },
+      data: { id: authUser.user.id, username, fullName: full_name, tempPassword },
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Lỗi tạo học sinh";
@@ -149,7 +170,7 @@ const importStudentsBatchSchema = z.object({
 
 export async function importStudents(
   input: unknown
-): Promise<ActionResult<{ importedCount: number; errors?: string[] }>> {
+): Promise<ActionResult<{ importedCount: number; defaultPassword: string; errors?: string[] }>> {
   try {
     const parsed = importStudentsBatchSchema.safeParse(input);
     if (!parsed.success) {
@@ -172,7 +193,7 @@ export async function importStudents(
 
     for (const student of students) {
       try {
-        const tempPassword = generateTempPassword("Hs");
+        const tempPassword = DEFAULT_STUDENT_PASSWORD;
         const email = internalEmail(student.username);
 
         const { data: authUser, error: authError } = await admin.auth.admin.createUser({
@@ -217,10 +238,133 @@ export async function importStudents(
 
     return {
       ok: true,
-      data: { importedCount: successCount, errors: errors.length > 0 ? errors : undefined },
+      data: {
+        importedCount: successCount,
+        defaultPassword: DEFAULT_STUDENT_PASSWORD,
+        errors: errors.length > 0 ? errors : undefined,
+      },
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Lỗi nhập danh sách học sinh";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function resetStudentPassword(input: {
+  studentId: string;
+  classId: string;
+}): Promise<ActionResult<{ defaultPassword: string }>> {
+  try {
+    const actor = await getProfile();
+    if (!actor || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
+      return { ok: false, error: "Bạn không có quyền đặt lại mật khẩu học sinh" };
+    }
+    const admin = createAdminClient();
+    if (actor.role === "teacher") {
+      const { data: ownedClass, error: classError } = await admin
+        .from("classes")
+        .select("id")
+        .eq("id", input.classId)
+        .eq("teacher_id", actor.id)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (classError || !ownedClass) {
+        return { ok: false, error: "Bạn không được phân công phụ trách lớp học này" };
+      }
+
+      const { data: studentEnrollment } = await admin
+        .from("class_students")
+        .select("student_id")
+        .eq("class_id", input.classId)
+        .eq("student_id", input.studentId)
+        .maybeSingle();
+      if (!studentEnrollment) {
+        return { ok: false, error: "Học sinh không thuộc lớp học này" };
+      }
+    }
+
+    const { error: authError } = await admin.auth.admin.updateUserById(input.studentId, {
+      password: DEFAULT_STUDENT_PASSWORD,
+      app_metadata: { role: "student", must_change_password: true },
+      user_metadata: { must_change_password: true },
+    });
+    if (authError) return { ok: false, error: authError.message };
+
+    await admin.from("profiles").update({ must_change_password: true }).eq("id", input.studentId);
+    return { ok: true, data: { defaultPassword: DEFAULT_STUDENT_PASSWORD } };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Lỗi đặt lại mật khẩu học sinh";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function resetClassStudentsPassword(input: {
+  classId: string;
+}): Promise<ActionResult<{ resetCount: number; defaultPassword: string }>> {
+  try {
+    const actor = await getProfile();
+    if (!actor || !actor.isActive || !["admin", "teacher"].includes(actor.role)) {
+      return { ok: false, error: "Bạn không có quyền quản lý lớp học này" };
+    }
+    const admin = createAdminClient();
+    if (actor.role === "teacher") {
+      const { data: ownedClass, error: classError } = await admin
+        .from("classes")
+        .select("id")
+        .eq("id", input.classId)
+        .eq("teacher_id", actor.id)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (classError || !ownedClass) {
+        return { ok: false, error: "Bạn không được phân công phụ trách lớp học này" };
+      }
+    }
+
+    const { data: students, error: studentError } = await admin
+      .from("class_students")
+      .select("student_id")
+      .eq("class_id", input.classId);
+    if (studentError) return { ok: false, error: studentError.message };
+    if (!students || students.length === 0) {
+      return { ok: false, error: "Lớp học chưa có học sinh nào" };
+    }
+
+    let successCount = 0;
+    for (const s of students) {
+      const { error } = await admin.auth.admin.updateUserById(s.student_id, {
+        password: DEFAULT_STUDENT_PASSWORD,
+        app_metadata: { role: "student", must_change_password: true },
+        user_metadata: { must_change_password: true },
+      });
+      if (!error) {
+        await admin.from("profiles").update({ must_change_password: true }).eq("id", s.student_id);
+        successCount++;
+      }
+    }
+
+    return {
+      ok: true,
+      data: { resetCount: successCount, defaultPassword: DEFAULT_STUDENT_PASSWORD },
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Lỗi đặt lại mật khẩu danh sách học sinh";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function parseStudentFileAction(
+  formData: FormData
+): Promise<ActionResult<{ validRows: { username: string; full_name: string; class_name?: string }[]; errors: { rowNumber: number; reason: string }[] }>> {
+  try {
+    const file = formData.get("file") as File | null;
+    if (!file) return { ok: false, error: "Vui lòng chọn tệp danh sách học sinh (Excel hoặc CSV)" };
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const result = parseStudentsExcel(buffer);
+    return { ok: true, data: result };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Lỗi đọc tệp danh sách học sinh";
     return { ok: false, error: msg };
   }
 }

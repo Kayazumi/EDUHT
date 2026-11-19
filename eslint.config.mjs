@@ -11,6 +11,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".agents/**",
+    ".github/**",
+    ".impeccable/**",
+    ".codex/**",
   ]),
   {
     files: ["**/*.{ts,tsx}"],

@@ -3,7 +3,12 @@ import { z } from "zod";
 
 export const usernameSchema = z
   .string()
-  .regex(/^[a-z0-9._-]{3,30}$/, "Tên đăng nhập gồm 3-30 ký tự thường, số, chấm, gạch dưới hoặc gạch ngang");
+  .transform((val) => val.trim().toLowerCase())
+  .pipe(
+    z
+      .string()
+      .regex(/^[a-z0-9._-]{3,30}$/, "Tên đăng nhập / Mã học sinh gồm 3-30 ký tự (chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang)")
+  );
 
 export const passwordSchema = z
   .string()

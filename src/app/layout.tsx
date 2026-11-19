@@ -4,8 +4,8 @@ import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: "PBL Platform - Nền tảng quản lý dự án học tập",
-  description: "Quản lý tiến trình và đánh giá đồng đẳng trong dạy học dự án Tin học THPT",
+  title: "EDUHT - Nền tảng quản lý dự án học tập Tin học",
+  description: "Quản lý tiến trình và đánh giá đồng đẳng BARS trong dạy học dự án Tin học THPT",
 };
 
 export default function RootLayout({

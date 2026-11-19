@@ -4,6 +4,28 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PortalDataState } from "@/components/ui/portal-data-state";
+import { usePortalData } from "@/hooks/use-portal-data";
+
+type DataRow = Record<string, unknown>;
+
+interface TeacherProgressData {
+  groups: DataRow[];
+  contributions: DataRow[];
+  groupDetails: DataRow[];
+}
+
+function readString(row: DataRow | null | undefined, key: string, fallback = "") {
+  const value = row?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNumber(row: DataRow, key: string) {
+  const value = row[key];
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 interface GroupProgressItem {
   id: string;
@@ -17,6 +39,7 @@ interface GroupProgressItem {
 
 interface StudentContributionItem {
   studentId: string;
+  groupId: string;
   studentName: string;
   groupName: string;
   assignedCount: number;
@@ -35,30 +58,43 @@ export default function TeacherProjectDashboardPage({
 }) {
   const [resolvedId, setResolvedId] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
-  const lastUpdated = "14:15 - Hôm nay";
+  const { data, error, isLoading, refresh } = usePortalData<TeacherProgressData>("teacherProgress", resolvedId);
 
   React.useEffect(() => {
     params.then((p) => setResolvedId(p.projectId));
   }, [params]);
 
-  const groupProgressList: GroupProgressItem[] = [
-    { id: "g1", name: "Nhóm 01", totalTasks: 4, doneTasks: 3, lateTasks: 1, completionRate: 0.75, overdueRate: 0.25 },
-    { id: "g2", name: "Nhóm 02", totalTasks: 4, doneTasks: 2, lateTasks: 1, completionRate: 0.5, overdueRate: 0.33 },
-    { id: "g3", name: "Nhóm 03", totalTasks: 4, doneTasks: 1, lateTasks: 2, completionRate: 0.25, overdueRate: 0.67 }, // Cảnh báo trễ ≥ 30%
-    { id: "g4", name: "Nhóm 04", totalTasks: 4, doneTasks: 4, lateTasks: 0, completionRate: 1.0, overdueRate: 0.0 },
-    { id: "g5", name: "Nhóm 05", totalTasks: 4, doneTasks: 3, lateTasks: 0, completionRate: 0.75, overdueRate: 0.0 },
-    { id: "g6", name: "Nhóm 06", totalTasks: 4, doneTasks: 0, lateTasks: 0, completionRate: 0.0, overdueRate: null }, // Mẫu số 0: chưa có dữ liệu
-  ];
+  if (!resolvedId || isLoading) return <PortalDataState label="tiến độ dự án" />;
+  if (error) return <PortalDataState label="tiến độ dự án" error={error} onRetry={refresh} />;
+  if (!data) return <PortalDataState label="tiến độ dự án" error="Không có dữ liệu tiến độ cho dự án này." onRetry={refresh} />;
 
-  const studentContributions: StudentContributionItem[] = [
-    { studentId: "s1", studentName: "Học Sinh Mẫu 1", groupName: "Nhóm 01", assignedCount: 2, doneCount: 2, lateCount: 0, completionRate: 1.0, overdueRate: 0.0, reassignCount: 0, postponeCount: 0 },
-    { studentId: "s2", studentName: "Học Sinh Mẫu 2", groupName: "Nhóm 01", assignedCount: 1, doneCount: 1, lateCount: 0, completionRate: 1.0, overdueRate: 0.0, reassignCount: 0, postponeCount: 0 },
-    { studentId: "s3", studentName: "Nguyễn Quang Anh", groupName: "Nhóm 01", assignedCount: 1, doneCount: 0, lateCount: 1, completionRate: 0.0, overdueRate: 1.0, reassignCount: 1, postponeCount: 1 },
-    { studentId: "s4", studentName: "Trần Minh Bình", groupName: "Nhóm 01", assignedCount: 1, doneCount: 0, lateCount: 0, completionRate: 0.0, overdueRate: null, reassignCount: 0, postponeCount: 0 },
-    { studentId: "s5", studentName: "Phạm Thị Dung", groupName: "Nhóm 02", assignedCount: 2, doneCount: 1, lateCount: 1, completionRate: 0.5, overdueRate: 0.5, reassignCount: 0, postponeCount: 0 },
-    { studentId: "s6", studentName: "Lê Thị Cúc", groupName: "Nhóm 02", assignedCount: 1, doneCount: 1, lateCount: 0, completionRate: 1.0, overdueRate: 0.0, reassignCount: 0, postponeCount: 0 },
-    { studentId: "s7", studentName: "Vũ Văn Hùng", groupName: "Nhóm 03", assignedCount: 2, doneCount: 0, lateCount: 2, completionRate: 0.0, overdueRate: 1.0, reassignCount: 2, postponeCount: 2 },
-  ];
+  const groupNames = new Map(data.groupDetails.map((group) => [readString(group, "id"), readString(group, "name", "Nhóm")]));
+  const groupProgressList: GroupProgressItem[] = data.groups.map((row) => ({
+    id: readString(row, "group_id"),
+    name: readString(row, "group_name", groupNames.get(readString(row, "group_id")) || "Nhóm"),
+    totalTasks: readNumber(row, "total_tasks") ?? 0,
+    doneTasks: readNumber(row, "done_tasks") ?? 0,
+    lateTasks: readNumber(row, "late_tasks") ?? 0,
+    completionRate: readNumber(row, "completion_rate") ?? 0,
+    overdueRate: readNumber(row, "overdue_rate"),
+  }));
+  const studentContributions: StudentContributionItem[] = data.contributions.map((row) => ({
+    studentId: readString(row, "student_id"),
+    groupId: readString(row, "group_id"),
+    studentName: readString(row, "student_name", "Học sinh"),
+    groupName: groupNames.get(readString(row, "group_id")) || "Nhóm",
+    assignedCount: readNumber(row, "assigned_tasks") ?? 0,
+    doneCount: readNumber(row, "completed_tasks") ?? 0,
+    lateCount: readNumber(row, "late_tasks") ?? 0,
+    completionRate: readNumber(row, "individual_completion_rate") ?? 0,
+    overdueRate: readNumber(row, "individual_overdue_rate"),
+    reassignCount: readNumber(row, "reassign_count") ?? 0,
+    postponeCount: readNumber(row, "postpone_count") ?? 0,
+  }));
+  const totalTasks = groupProgressList.reduce((sum, group) => sum + group.totalTasks, 0);
+  const completedTasks = groupProgressList.reduce((sum, group) => sum + group.doneTasks, 0);
+  const lateTasks = groupProgressList.reduce((sum, group) => sum + group.lateTasks, 0);
+  const groupsToReview = groupProgressList.filter((group) => (group.overdueRate ?? 0) >= 0.3).length;
 
   const handleExportCsv = () => {
     const header = "student_name,group_name,assigned_tasks,completed_tasks,late_tasks,completion_rate,overdue_rate,reassign_count,postpone_count\n";
@@ -72,13 +108,13 @@ export default function TeacherProjectDashboardPage({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `tien-do-du-an-${resolvedId || "p01"}.csv`;
+    a.download = `tien-do-du-an-${resolvedId}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const filteredStudents = studentContributions.filter(
-    (s) => groupFilter === "all" || s.groupName === groupFilter
+    (s) => groupFilter === "all" || s.groupId === groupFilter
   );
 
   return (
@@ -87,24 +123,25 @@ export default function TeacherProjectDashboardPage({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <Link href={`/teacher/projects/${resolvedId || "proj-p01"}`} className="hover:underline">
+            <Link href={`/teacher/projects/${resolvedId}`} className="hover:underline">
               Chi tiết dự án
             </Link>
             <span>/</span>
             <span>Bảng điều khiển tiến độ</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Bảng điều khiển tiến độ giáo viên (PBL Dashboard)
+            Tiến độ dự án
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Cập nhật thời gian thực theo view <code className="font-mono text-indigo-700">v_group_progress</code> và <code className="font-mono text-indigo-700">v_student_contribution</code>
+            Số liệu được tổng hợp từ nhiệm vụ và thành viên của dự án.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Cập nhật: {lastUpdated}</span>
+          <span className="text-xs text-slate-400">Dữ liệu cập nhật trực tiếp</span>
           <button
             onClick={handleExportCsv}
+            disabled={studentContributions.length === 0}
             className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-sm"
           >
             📥 Xuất CSV tiến độ
@@ -116,32 +153,33 @@ export default function TeacherProjectDashboardPage({
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">Tổng số thẻ Kanban</span>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">24 thẻ</div>
-          <span className="text-xs text-slate-400">Phân bổ đều cho 6 nhóm</span>
+          <div className="text-2xl font-extrabold text-slate-900 mt-1">{totalTasks} thẻ</div>
+          <span className="text-xs text-slate-400">Trong {groupProgressList.length} nhóm</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold text-emerald-600 uppercase">Tiến độ hoàn thành chung</span>
-          <div className="text-2xl font-extrabold text-emerald-700 mt-1">54.2%</div>
-          <span className="text-xs text-slate-400">13/24 thẻ đã Done</span>
+          <div className="text-2xl font-extrabold text-emerald-700 mt-1">{totalTasks ? `${Math.round((completedTasks / totalTasks) * 100)}%` : "—"}</div>
+          <span className="text-xs text-slate-400">{completedTasks}/{totalTasks} thẻ hoàn thành</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold text-rose-600 uppercase">Thẻ trễ hạn hiện tại</span>
-          <div className="text-2xl font-extrabold text-rose-600 mt-1">4 thẻ</div>
-          <span className="text-xs text-rose-500 font-medium">Cần nhắc nhở nhóm</span>
+          <div className="text-2xl font-extrabold text-rose-600 mt-1">{lateTasks} thẻ</div>
+          <span className="text-xs text-rose-500 font-medium">Đã trễ hạn</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold text-amber-600 uppercase">Nhóm cần can thiệp</span>
-          <div className="text-2xl font-extrabold text-amber-600 mt-1">1 nhóm</div>
-          <span className="text-xs text-amber-700 font-medium">Nhóm 03 trễ hạn &gt; 30%</span>
+          <div className="text-2xl font-extrabold text-amber-600 mt-1">{groupsToReview} nhóm</div>
+          <span className="text-xs text-amber-700 font-medium">Tỷ lệ trễ từ 30%</span>
         </div>
       </div>
 
       {/* KHỐI 2: LƯỚI TIẾN ĐỘ CÁC NHÓM (v_group_progress) */}
       <div className="space-y-3">
         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-          Tiến trình theo nhóm (v_group_progress)
+          Tiến độ theo nhóm
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {groupProgressList.length === 0 && <p className="col-span-full rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Dự án chưa có nhóm hoặc chưa có dữ liệu nhiệm vụ.</p>}
           {groupProgressList.map((g) => {
             const isLateWarning = (g.overdueRate ?? 0) >= 0.3;
             return (
@@ -198,10 +236,10 @@ export default function TeacherProjectDashboardPage({
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              Chỉ báo tiến trình cá nhân (v_student_contribution)
+              Tiến độ theo học sinh
             </h2>
             <p className="text-xs text-slate-500">
-              Theo dõi đóng góp thẻ việc, số lần dời hạn và đổi người (đối chiếu né trễ hạn ở mục 7.2)
+              Theo dõi đóng góp thẻ việc, số lần dời hạn và đổi người thực hiện nhằm hỗ trợ nhóm kịp thời
             </p>
           </div>
 
@@ -213,9 +251,7 @@ export default function TeacherProjectDashboardPage({
               className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white"
             >
               <option value="all">Tất cả nhóm</option>
-              <option value="Nhóm 01">Nhóm 01</option>
-              <option value="Nhóm 02">Nhóm 02</option>
-              <option value="Nhóm 03">Nhóm 03</option>
+              {groupProgressList.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
             </select>
           </div>
         </div>
@@ -234,6 +270,9 @@ export default function TeacherProjectDashboardPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {filteredStudents.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">{studentContributions.length === 0 ? "Chưa có dữ liệu nhiệm vụ được giao." : "Không có học sinh trong nhóm đã chọn."}</td></tr>
+              )}
               {filteredStudents.map((s) => (
                 <tr key={s.studentId} className="hover:bg-slate-50">
                   <td className="py-2.5 px-4 font-bold text-slate-900">{s.studentName}</td>
