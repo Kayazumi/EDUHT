@@ -22,10 +22,15 @@ export function Topbar({ role, userName = "Người dùng", onToggleMobileMenu }
     student: "Học sinh",
   }[role || "student"];
 
-  const profileHref = role === "student" ? "/student/profile" : "/change-password";
+  const profileHref =
+    role === "teacher"
+      ? "/teacher/profile"
+      : role === "student"
+        ? "/student/profile"
+        : "/admin/profile";
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between no-print sticky top-0 z-30 transition-colors">
+    <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between no-print sticky top-0 z-30 transition-colors">
       <div className="flex items-center gap-3">
         {onToggleMobileMenu && (
           <button

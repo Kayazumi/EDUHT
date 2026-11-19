@@ -41,7 +41,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${fontTitle.variable} ${fontSans.variable} ${fontMono.variable}`}
     >
-      <body className="antialiased min-h-screen font-sans bg-slate-50 text-slate-900 transition-colors duration-200">
+      <body className="antialiased min-h-screen font-sans bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
         <ThemeProvider>
           <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>

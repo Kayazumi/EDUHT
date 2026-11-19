@@ -40,7 +40,7 @@ export function AppShell({ role, userName, title, children }: AppShellProps) {
   }, [mobileMenuOpen]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
       <Topbar
         role={role}
         userName={userName}

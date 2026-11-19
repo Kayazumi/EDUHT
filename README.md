@@ -215,6 +215,7 @@ src/app/
 ├── (admin)/admin/
 │   ├── layout.tsx                   # Khung và kiểm tra quyền admin
 │   ├── page.tsx                     # Dashboard tổng quan admin (dữ liệu thật Supabase + biểu đồ Recharts)
+│   ├── profile/page.tsx             # Hồ sơ Quản trị viên & Đổi mật khẩu (cập nhật họ tên, phân cấp quyền)
 │   ├── users/page.tsx               # Quản lý tài khoản, đổi vai trò, khóa/mở và chuyển trang tạo giáo viên
 │   ├── users/new/page.tsx           # Tạo tài khoản giáo viên mới (kết nối createTeacher Server Action)
 │   ├── users/import/page.tsx        # Import danh sách học sinh từ file CSV
@@ -228,6 +229,7 @@ src/app/
 ├── (teacher)/teacher/
 │   ├── layout.tsx                   # Khung và kiểm tra quyền giáo viên
 │   ├── page.tsx                     # Dashboard giáo viên (việc cần làm ưu tiên và dự án đang chạy)
+│   ├── profile/page.tsx             # Hồ sơ Giáo viên & Đổi mật khẩu (cập nhật họ tên, tổ bộ môn, chuyên môn)
 │   ├── classes/page.tsx             # Quản lý danh sách lớp phụ trách (10C4, 10C5)
 │   ├── classes/[classId]/page.tsx   # Quản lý học sinh lớp phụ trách (+ Thêm 1 HS, đặt lại mật khẩu)
 │   ├── classes/[classId]/students/import/page.tsx # Nhập học sinh đồng loạt từ file Excel (.xlsx, .xls) hoặc CSV
@@ -247,7 +249,7 @@ src/app/
 ├── (student)/student/
 │   ├── layout.tsx                   # Khung và kiểm tra quyền học sinh
 │   ├── page.tsx                     # Dashboard học sinh (dự án tham gia và nhiệm vụ cá nhân)
-│   ├── profile/page.tsx             # Hồ sơ cá nhân (căn giữa), đồng thuận nghiên cứu và form đổi mật khẩu
+│   ├── profile/page.tsx             # Hồ sơ Học sinh & Đổi mật khẩu (cập nhật họ tên, xem lớp học, đồng thuận nghiên cứu)
 │   └── projects/[projectId]/
 │       ├── page.tsx                 # Tổng quan dự án/nhóm của học sinh
 │       ├── board/page.tsx           # Bảng công việc Kanban nhóm
@@ -263,8 +265,8 @@ Ngoài App Router, `src/proxy.ts` xử lý request/phiên ở ranh giới trư�
 
 ### Giao diện và hành vi dùng lại — src/components/, src/hooks/
 
-- **components/layout/**: `app-shell.tsx` dựng khung trang responsive; `sidebar.tsx` thanh bên hỗ trợ thu phóng co giãn (w-16 / w-64); `role-nav.tsx` hiển thị menu theo vai trò và duy trì dự án đang tham gia; `topbar.tsx` thanh trên cùng tích hợp nút chuyển chế độ Sáng/Tối và click Avatar vào xem Hồ sơ/Đổi mật khẩu.
-- **components/theme/**: `theme-provider.tsx` cung cấp context chuyển đổi chế độ Sáng / Tối (Dark / Light Mode) và lưu trạng thái vào `localStorage`.
+- **components/layout/**: `app-shell.tsx` dựng khung trang responsive; `sidebar.tsx` thanh bên hỗ trợ thu phóng co giãn (w-16 / w-64); `role-nav.tsx` hiển thị menu theo vai trò (đã bỏ Hồ sơ & Mật khẩu khỏi thanh bên theo chuẩn giao diện mới); `topbar.tsx` thanh trên cùng tích hợp nút chuyển chế độ Sáng/Tối và click Avatar/Tên tài khoản để vào xem Hồ sơ/Đổi mật khẩu cho cả 3 vai trò (Admin, Giáo viên, Học sinh).
+- **components/theme/**: `theme-provider.tsx` cung cấp context chuyển đổi chế độ Sáng / Tối (Dark / Light Mode) với nền trắng sáng (`#ffffff` / văn bản tối `#0f172a`) và chế độ tối (`#090d16` / văn bản sáng `#f8fafc`), lưu trạng thái vào `localStorage`.
 - **components/ui/**: `button.tsx` nút; `input.tsx` ô nhập; `select.tsx` danh sách chọn; `badge.tsx` nhãn trạng thái; `dialog.tsx` hộp thoại; `table.tsx` bảng; `tabs.tsx` tab; `toast.tsx` thông báo nổi; `skeleton.tsx` placeholder tải dữ liệu; `portal-data-state.tsx` hiển thị trạng thái tải/lỗi/rỗng đồng nhất của portal.
 - **components/forms/**: `user-form.tsx` và `project-form.tsx` thu thập dữ liệu tài khoản/dự án; `csv-upload.tsx` chọn và xem trước CSV; `due-date-picker.tsx` chọn hạn chót.
 - **components/kanban/**: `board.tsx` là vùng bảng; `column.tsx` là cột trạng thái; `task-card.tsx` là thẻ nhiệm vụ; `task-dialog.tsx` hiển thị/chỉnh sửa chi tiết; `assignee-picker.tsx` chọn người nhận.

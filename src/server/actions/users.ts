@@ -479,3 +479,48 @@ export async function setRole(input: unknown): Promise<ActionResult> {
     return { ok: false, error: msg };
   }
 }
+
+export async function updatePersonalProfile(input: {
+  fullName: string;
+  department?: string;
+  subjectArea?: string;
+}): Promise<ActionResult> {
+  try {
+    const actor = await getProfile();
+    if (!actor || !actor.isActive) {
+      return { ok: false, error: "Vui lòng đăng nhập để cập nhật hồ sơ" };
+    }
+    const trimmedName = input.fullName.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      return { ok: false, error: "Họ và tên phải có từ 2 đến 100 ký tự" };
+    }
+
+    const admin = createAdminClient();
+    const updateData: Record<string, unknown> = {
+      full_name: trimmedName,
+      updated_at: new Date().toISOString(),
+    };
+    if (actor.role === "teacher") {
+      if (input.department !== undefined) updateData.department = input.department.trim();
+      if (input.subjectArea !== undefined) updateData.subject_area = input.subjectArea.trim();
+    }
+
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update(updateData)
+      .eq("id", actor.id);
+
+    if (profileError) {
+      return { ok: false, error: profileError.message };
+    }
+
+    await admin.auth.admin.updateUserById(actor.id, {
+      user_metadata: { full_name: trimmedName },
+    });
+
+    return { ok: true, data: undefined };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Lỗi cập nhật hồ sơ";
+    return { ok: false, error: msg };
+  }
+}

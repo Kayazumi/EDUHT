@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!mustChangePassword && pathname === "/change-password") {
-    return NextResponse.redirect(new URL(`/${role}`, request.url));
+    return NextResponse.redirect(new URL(`/${role}/profile`, request.url));
   }
 
   // 2.2 Đã có phiên truy cập /login hoặc trang chủ /

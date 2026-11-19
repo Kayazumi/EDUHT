@@ -110,8 +110,6 @@ export function RoleNav({ role, onNavigate, isCollapsed = false }: RoleNavProps)
         { text: "📊 Kết quả tổng kết", href: routes.student.results(effectiveStudentProjectId) }
       );
     }
-
-    rawNavItems.push({ text: "👤 Hồ sơ & Mật khẩu", href: routes.student.profile });
   }
 
   const navItems: NavItem[] = rawNavItems.map((item) => {

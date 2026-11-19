@@ -8,8 +8,8 @@ import { z } from "zod";
 
 const inputSchema = z.object({
   view: z.enum([
-    "adminDashboard", "adminUsers", "adminUser", "adminClasses", "adminClass", "adminCurriculum", "adminBars", "adminResearch", "adminAudit",
-    "teacherDashboard", "teacherProjects", "teacherClass", "teacherProject", "teacherTemplates", "teacherGroups", "teacherGroup", "teacherProgress", "teacherEvaluation", "teacherRound", "teacherGrading", "teacherExport",
+    "adminDashboard", "adminProfile", "adminUsers", "adminUser", "adminClasses", "adminClass", "adminCurriculum", "adminBars", "adminResearch", "adminAudit",
+    "teacherDashboard", "teacherProfile", "teacherProjects", "teacherClass", "teacherProject", "teacherTemplates", "teacherGroups", "teacherGroup", "teacherProgress", "teacherEvaluation", "teacherRound", "teacherGrading", "teacherExport",
     "studentDashboard", "studentProfile", "studentProject", "studentBoard", "studentReview", "studentReviewForm", "studentResults",
   ]),
   id: z.string().optional(),
@@ -18,8 +18,8 @@ const inputSchema = z.object({
 export type PortalDataView = z.infer<typeof inputSchema>["view"];
 
 const rolesByView: Record<z.infer<typeof inputSchema>["view"], Role> = {
-  adminDashboard: "admin", adminUsers: "admin", adminUser: "admin", adminClasses: "admin", adminClass: "admin", adminCurriculum: "admin", adminBars: "admin", adminResearch: "admin", adminAudit: "admin",
-  teacherDashboard: "teacher", teacherProjects: "teacher", teacherClass: "teacher", teacherProject: "teacher", teacherTemplates: "teacher", teacherGroups: "teacher", teacherGroup: "teacher", teacherProgress: "teacher", teacherEvaluation: "teacher", teacherRound: "teacher", teacherGrading: "teacher", teacherExport: "teacher",
+  adminDashboard: "admin", adminProfile: "admin", adminUsers: "admin", adminUser: "admin", adminClasses: "admin", adminClass: "admin", adminCurriculum: "admin", adminBars: "admin", adminResearch: "admin", adminAudit: "admin",
+  teacherDashboard: "teacher", teacherProfile: "teacher", teacherProjects: "teacher", teacherClass: "teacher", teacherProject: "teacher", teacherTemplates: "teacher", teacherGroups: "teacher", teacherGroup: "teacher", teacherProgress: "teacher", teacherEvaluation: "teacher", teacherRound: "teacher", teacherGrading: "teacher", teacherExport: "teacher",
   studentDashboard: "student", studentProfile: "student", studentProject: "student", studentBoard: "student", studentReview: "student", studentReviewForm: "student", studentResults: "student",
 };
 
@@ -73,6 +73,9 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
         ]);
         if (logs.error) throw logs.error;
         return { ok: true, data: { profiles, classes, projects, logs: logs.data ?? [] } };
+      }
+      case "adminProfile": {
+        return { ok: true, data: { profile } };
       }
       case "adminUsers": {
         const [profiles, memberships, classes] = await Promise.all([query("profiles"), query("class_students", "student_id,class_id"), query("classes", "id,name")]);
@@ -185,6 +188,11 @@ export async function loadPortalData(input: unknown): Promise<ActionResult<unkno
         const groups = await ids("groups", "id", [...new Set(scores.map((row) => rowString(row, "group_id")))]);
         const profiles = await ids("profiles", "id", scores.map((row) => rowString(row, "student_id")));
         return { ok: true, data: { scores, groups, profiles } };
+      }
+      case "teacherProfile": {
+        const classes = await filtered("classes", "teacher_id", profile.id);
+        const projects = await ids("projects", "class_id", classes.map((row) => rowString(row, "id")));
+        return { ok: true, data: { profile, classes, projects } };
       }
       case "studentDashboard":
       case "studentProfile": {
