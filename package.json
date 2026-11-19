@@ -17,6 +17,7 @@
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
     "db:seed-ppt-demo": "tsx scripts/seed-ppt-project.ts",
+    "db:seed-2-classes": "tsx scripts/seed-2-classes-60-students.ts",
     "db:provision-auth": "tsx scripts/provision-auth-accounts.ts",
     "db:test": "supabase test db",
     "import:students": "tsx scripts/import-students.ts",
