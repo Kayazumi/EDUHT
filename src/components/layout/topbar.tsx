@@ -5,7 +5,7 @@ import React from "react";
 import Link from "next/link";
 import type { Role } from "@/shared/config/roles";
 import { signOut } from "@/server/actions/auth";
-import { useTheme } from "@/components/theme/theme-provider";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export interface TopbarProps {
   role?: Role;
@@ -14,8 +14,6 @@ export interface TopbarProps {
 }
 
 export function Topbar({ role, userName = "Người dùng", onToggleMobileMenu }: TopbarProps) {
-  const { theme, toggleTheme } = useTheme();
-
   const roleLabel = {
     admin: "Quản trị viên",
     teacher: "Giáo viên",
@@ -65,33 +63,7 @@ export function Topbar({ role, userName = "Người dùng", onToggleMobileMenu }
 
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Nút chuyển đổi giao diện Sáng / Tối (Theme Toggle) */}
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          title={theme === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
-          aria-label="Đổi chế độ sáng tối"
-        >
-          {theme === "dark" ? (
-            <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-              />
-            </svg>
-          )}
-        </button>
+        <ThemeToggle />
 
         {/* Nút tài khoản: Bấm vào avatar để vào xem hồ sơ và đổi mật khẩu */}
         <Link

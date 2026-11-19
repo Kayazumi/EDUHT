@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { changePassword } from "@/server/actions/auth";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -44,11 +45,14 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50">
-      <div className="w-full max-w-md bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Đổi mật khẩu lần đầu</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-title mb-1">Đổi mật khẩu lần đầu</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Tài khoản của bạn được yêu cầu đổi mật khẩu trước khi tiếp tục
           </p>
         </div>

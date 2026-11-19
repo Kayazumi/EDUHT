@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { registerAccount, verifySignupCode } from "@/server/actions/auth";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -57,10 +58,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-      <div className="w-full max-w-lg bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900 text-center">Tạo tài khoản EDUHT</h1>
-        <p className="mt-2 mb-6 text-sm text-slate-500 text-center">Chỉ học sinh và giáo viên mới có thể tự đăng ký.</p>
+    <main className="min-h-screen flex items-center justify-center p-6 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-lg bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-title text-center">Tạo tài khoản EDUHT</h1>
+        <p className="mt-2 mb-6 text-sm text-slate-500 dark:text-slate-400 text-center">Chỉ học sinh và giáo viên mới có thể tự đăng ký.</p>
 
         {error && <div role="alert" className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
         {message && <div role="status" className="mb-4 p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm">{message}</div>}

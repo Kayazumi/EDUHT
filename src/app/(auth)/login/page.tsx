@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/server/actions/auth";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,11 +41,14 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50">
-      <div className="w-full max-w-md bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Đăng nhập EDUHT</h1>
-          <p className="text-sm text-slate-500">Dùng tên đăng nhập hoặc email đã xác minh</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-title mb-1">Đăng nhập EDUHT</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Dùng tên đăng nhập hoặc email đã xác minh</p>
         </div>
 
         {error && <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
